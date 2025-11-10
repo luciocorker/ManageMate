@@ -1,18 +1,18 @@
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import Svg, { Path } from "react-native-svg";
-import { GestureDetector, Gesture } from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
   runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
 
 // SVG Icons
 const BackIcon = () => (
@@ -74,7 +74,7 @@ interface ChannelDetailProps {
 
 export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
-  
+
   // Swipe gesture animations
   const translateX = useSharedValue(0);
 
@@ -109,53 +109,56 @@ export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
   return (
     <GestureDetector gesture={panGesture}>
       <Animated.View style={[styles.container, animatedStyle]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <BackIcon />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{channel.name}</Text>
-      </View>
-
-      <ScrollView style={styles.content}>
-        {/* Channel Info */}
-        <View style={styles.infoSection}>
-          <View style={styles.channelIcon}>
-            <UsersIcon />
-          </View>
-          <Text style={styles.channelName}>{channel.name}</Text>
-          <Text style={styles.memberCount}>{channel.members} members</Text>
-        </View>
-
-        {/* Members List */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Members</Text>
-          <View style={styles.membersList}>
-            {channel.memberNames?.map((memberName, index) => (
-              <View key={index} style={styles.memberItem}>
-                <View
-                  style={[
-                    styles.memberAvatar,
-                    { backgroundColor: avatarColors[index % avatarColors.length] },
-                  ]}
-                >
-                  <Text style={styles.memberAvatarText}>
-                    {memberName.charAt(0)}
-                  </Text>
-                </View>
-                <Text style={styles.memberName}>{memberName}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Channel Actions */}
-        <View style={styles.section}>
-          <TouchableOpacity style={styles.actionButton}>
-            <Text style={styles.actionButtonText}>Open Channel Chat</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <BackIcon />
           </TouchableOpacity>
+          <Text style={styles.headerTitle}>{channel.name}</Text>
         </View>
-      </ScrollView>
+
+        <ScrollView style={styles.content}>
+          {/* Channel Info */}
+          <View style={styles.infoSection}>
+            <View style={styles.channelIcon}>
+              <UsersIcon />
+            </View>
+            <Text style={styles.channelName}>{channel.name}</Text>
+            <Text style={styles.memberCount}>{channel.members} members</Text>
+          </View>
+
+          {/* Members List */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Members</Text>
+            <View style={styles.membersList}>
+              {channel.memberNames?.map((memberName, index) => (
+                <View key={index} style={styles.memberItem}>
+                  <View
+                    style={[
+                      styles.memberAvatar,
+                      {
+                        backgroundColor:
+                          avatarColors[index % avatarColors.length],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.memberAvatarText}>
+                      {memberName.charAt(0)}
+                    </Text>
+                  </View>
+                  <Text style={styles.memberName}>{memberName}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Channel Actions */}
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>Open Channel Chat</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </Animated.View>
     </GestureDetector>
   );

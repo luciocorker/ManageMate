@@ -1,6 +1,6 @@
-import ChatScreen from "@/pages/ChatScreen";
-import ChannelDetail from "@/pages/ChannelDetail";
 import CreateChannelModal from "@/components/CreateChannelModal";
+import ChannelDetail from "@/pages/ChannelDetail";
+import ChatScreen from "@/pages/ChatScreen";
 import { useState } from "react";
 import {
   ScrollView,
@@ -58,10 +58,36 @@ interface Channel {
 }
 
 const INITIAL_CHANNELS: Channel[] = [
-  { id: 1, name: "Project Team", members: 5, memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis", "James Wilson", "Lisa Anderson"] },
-  { id: 2, name: "Design Squad", members: 3, memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis"] },
-  { id: 3, name: "Development", members: 8, memberNames: ["Mike Chen", "James Wilson", "Others"] },
-  { id: 4, name: "Marketing", members: 4, memberNames: ["Lisa Anderson", "Emily Davis", "Others"] },
+  {
+    id: 1,
+    name: "Project Team",
+    members: 5,
+    memberNames: [
+      "Sarah Johnson",
+      "Mike Chen",
+      "Emily Davis",
+      "James Wilson",
+      "Lisa Anderson",
+    ],
+  },
+  {
+    id: 2,
+    name: "Design Squad",
+    members: 3,
+    memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis"],
+  },
+  {
+    id: 3,
+    name: "Development",
+    members: 8,
+    memberNames: ["Mike Chen", "James Wilson", "Others"],
+  },
+  {
+    id: 4,
+    name: "Marketing",
+    members: 4,
+    memberNames: ["Lisa Anderson", "Emily Davis", "Others"],
+  },
 ];
 
 // SVG Icons
@@ -136,12 +162,15 @@ export default function MessagingPage() {
   const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
 
-  const handleCreateChannel = (channelName: string, selectedFriends: typeof DUMMY_FRIENDS) => {
+  const handleCreateChannel = (
+    channelName: string,
+    selectedFriends: typeof DUMMY_FRIENDS
+  ) => {
     const newChannel: Channel = {
       id: channels.length + 1,
       name: channelName,
       members: selectedFriends.length,
-      memberNames: selectedFriends.map(f => f.name),
+      memberNames: selectedFriends.map((f) => f.name),
     };
     setChannels([...channels, newChannel]);
   };
@@ -224,7 +253,7 @@ export default function MessagingPage() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Channels</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.addButton}
               onPress={() => setShowCreateChannelModal(true)}
             >
@@ -234,8 +263,8 @@ export default function MessagingPage() {
 
           <View style={styles.channelsList}>
             {channels.map((channel) => (
-              <TouchableOpacity 
-                key={channel.id} 
+              <TouchableOpacity
+                key={channel.id}
                 style={styles.channelItem}
                 onPress={() => setSelectedChannel(channel)}
               >
