@@ -1,4 +1,6 @@
 import ChatScreen from "@/pages/ChatScreen";
+import ChannelDetail from "@/pages/ChannelDetail";
+import CreateChannelModal from "@/components/CreateChannelModal";
 import { useState } from "react";
 import {
   ScrollView,
@@ -48,11 +50,18 @@ const DUMMY_FRIENDS = [
   },
 ];
 
-const DUMMY_CHANNELS = [
-  { id: 1, name: "Project Team", members: 5 },
-  { id: 2, name: "Design Squad", members: 3 },
-  { id: 3, name: "Development", members: 8 },
-  { id: 4, name: "Marketing", members: 4 },
+interface Channel {
+  id: number;
+  name: string;
+  members: number;
+  memberNames?: string[];
+}
+
+const INITIAL_CHANNELS: Channel[] = [
+  { id: 1, name: "Project Team", members: 5, memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis", "James Wilson", "Lisa Anderson"] },
+  { id: 2, name: "Design Squad", members: 3, memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis"] },
+  { id: 3, name: "Development", members: 8, memberNames: ["Mike Chen", "James Wilson", "Others"] },
+  { id: 4, name: "Marketing", members: 4, memberNames: ["Lisa Anderson", "Emily Davis", "Others"] },
 ];
 
 // SVG Icons
@@ -123,6 +132,29 @@ export default function MessagingPage() {
   const [selectedFriend, setSelectedFriend] = useState<
     (typeof DUMMY_FRIENDS)[0] | null
   >(null);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS);
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+
+  const handleCreateChannel = (channelName: string, selectedFriends: typeof DUMMY_FRIENDS) => {
+    const newChannel: Channel = {
+      id: channels.length + 1,
+      name: channelName,
+      members: selectedFriends.length,
+      memberNames: selectedFriends.map(f => f.name),
+    };
+    setChannels([...channels, newChannel]);
+  };
+
+  // If a channel is selected, show the channel detail screen
+  if (selectedChannel) {
+    return (
+      <ChannelDetail
+        channel={selectedChannel}
+        onBack={() => setSelectedChannel(null)}
+      />
+    );
+  }
 
   // If a friend is selected, show the chat screen
   if (selectedFriend) {
@@ -192,14 +224,21 @@ export default function MessagingPage() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Channels</Text>
-            <TouchableOpacity style={styles.addButton}>
+            <TouchableOpacity 
+              style={styles.addButton}
+              onPress={() => setShowCreateChannelModal(true)}
+            >
               <CreateChannelIcon />
             </TouchableOpacity>
           </View>
 
           <View style={styles.channelsList}>
-            {DUMMY_CHANNELS.map((channel) => (
-              <TouchableOpacity key={channel.id} style={styles.channelItem}>
+            {channels.map((channel) => (
+              <TouchableOpacity 
+                key={channel.id} 
+                style={styles.channelItem}
+                onPress={() => setSelectedChannel(channel)}
+              >
                 <View style={styles.channelIcon}>
                   <ChannelIcon />
                 </View>
@@ -214,6 +253,14 @@ export default function MessagingPage() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Create Channel Modal */}
+      <CreateChannelModal
+        visible={showCreateChannelModal}
+        onClose={() => setShowCreateChannelModal(false)}
+        onCreateChannel={handleCreateChannel}
+        friends={DUMMY_FRIENDS}
+      />
     </View>
   );
 }
