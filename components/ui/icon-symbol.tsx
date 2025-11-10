@@ -24,23 +24,7 @@ const MAPPING = {
   'calendar': 'calendar-today',
   'message.fill': 'message',
   'star.fill': 'star',
-  'star': 'star-outline',
   'person.fill': 'person',
-  'plus': 'add',
-  'magnifyingglass': 'search',
-  'line.3.horizontal.decrease': 'filter-list',
-  'arrow.up.arrow.down': 'sort',
-  'square.grid.2x2': 'grid-view',
-  'list.bullet': 'view-list',
-  'ellipsis': 'more-vert',
-  'pencil': 'edit',
-  'doc.on.doc': 'content-copy',
-  'trash': 'delete',
-  'checkmark': 'check',
-  'pause': 'pause',
-  'play': 'play-arrow',
-  'archivebox': 'archive',
-  'xmark': 'close',
 } as IconMapping;
 
 /**
