@@ -1,7 +1,7 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
+import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
@@ -18,10 +18,29 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.down': 'keyboard-arrow-down',
+  'chevron.up': 'keyboard-arrow-up',
   'folder.fill': 'folder',
+  'calendar': 'calendar-today',
   'message.fill': 'message',
   'star.fill': 'star',
+  'star': 'star-outline',
   'person.fill': 'person',
+  'plus': 'add',
+  'magnifyingglass': 'search',
+  'line.3.horizontal.decrease': 'filter-list',
+  'arrow.up.arrow.down': 'sort',
+  'square.grid.2x2': 'grid-view',
+  'list.bullet': 'view-list',
+  'ellipsis': 'more-vert',
+  'pencil': 'edit',
+  'doc.on.doc': 'content-copy',
+  'trash': 'delete',
+  'checkmark': 'check',
+  'pause': 'pause',
+  'play': 'play-arrow',
+  'archivebox': 'archive',
+  'xmark': 'close',
 } as IconMapping;
 
 /**
