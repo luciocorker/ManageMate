@@ -1,0 +1,2 @@
+# ManageMate
+initialising our application
