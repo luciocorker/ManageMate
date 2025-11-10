@@ -1,9 +1,17 @@
+import AddFriendModal from "@/components/AddFriendModal";
 import CreateChannelModal from "@/components/CreateChannelModal";
 import ChannelChatScreen from "@/pages/ChannelChatScreen";
 import ChannelDetail from "@/pages/ChannelDetail";
 import ChatScreen from "@/pages/ChatScreen";
-import { useState } from "react";
 import {
+  createChannel,
+  getChannels,
+  getDirectMessages,
+  getFriends,
+} from "@/supabase/supabaseClient";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,84 +20,29 @@ import {
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
-// Dummy data
-const DUMMY_FRIENDS = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    message: "Hey! Did you finish the project?",
-    avatar: "#FF6B6B",
-    online: true,
-  },
-  {
-    id: 2,
-    name: "Mike Chen",
-    message: "Thanks for your help yesterday!",
-    avatar: "#4ECDC4",
-    online: true,
-  },
-  {
-    id: 3,
-    name: "Emily Davis",
-    message: "See you at the meeting tomorrow",
-    avatar: "#45B7D1",
-    online: false,
-  },
-  {
-    id: 4,
-    name: "James Wilson",
-    message: "Can you send me those files?",
-    avatar: "#96CEB4",
-    online: false,
-  },
-  {
-    id: 5,
-    name: "Lisa Anderson",
-    message: "Great work on the presentation!",
-    avatar: "#FFEAA7",
-    online: true,
-  },
+import type { Channel, Friend } from "@/types/messaging";
+
+// Current user (replace with actual auth later)
+const CURRENT_USER = "Lee";
+const CURRENT_USER_EMAIL = "lee@example.com"; // TODO: Get from auth
+
+// Avatar colors for friends
+const AVATAR_COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#FFEAA7",
+  "#FF8B94",
+  "#9B59B6",
+  "#3498DB",
 ];
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
-
-const INITIAL_CHANNELS: Channel[] = [
-  {
-    id: 1,
-    name: "Project Team",
-    members: 5,
-    memberNames: [
-      "Sarah Johnson",
-      "Mike Chen",
-      "Emily Davis",
-      "James Wilson",
-      "Lisa Anderson",
-    ],
-  },
-  {
-    id: 2,
-    name: "Design Squad",
-    members: 3,
-    memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis"],
-  },
-  {
-    id: 3,
-    name: "Development",
-    members: 8,
-    memberNames: ["Mike Chen", "James Wilson", "Others"],
-  },
-  {
-    id: 4,
-    name: "Marketing",
-    members: 4,
-    memberNames: ["Lisa Anderson", "Emily Davis", "Others"],
-  },
-];
+// Get consistent color for a friend
+const getAvatarColor = (name: string) => {
+  const index = name.length % AVATAR_COLORS.length;
+  return AVATAR_COLORS[index];
+};
 
 // SVG Icons
 const AddFriendIcon = () => (
@@ -156,25 +109,89 @@ const OnlineIndicator = () => (
 );
 
 export default function MessagingPage() {
-  const [selectedFriend, setSelectedFriend] = useState<
-    (typeof DUMMY_FRIENDS)[0] | null
-  >(null);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [showChannelDetail, setShowChannelDetail] = useState(false);
-  const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleCreateChannel = (
+  // Load data from Supabase on mount
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setLoading(true);
+    try {
+      // Load channels and friends from Supabase
+      const [channelsData, friendsData] = await Promise.all([
+        getChannels(),
+        getFriends(CURRENT_USER),
+      ]);
+
+      // Transform Supabase channels to display format
+      const displayChannels: Channel[] = channelsData.map((ch) => ({
+        id: ch.id,
+        name: ch.name,
+        members: 0, // You can calculate this from a members table later
+        memberNames: [], // Add member tracking later
+      }));
+
+      // Transform Supabase friends to display format with last message
+      const displayFriends: Friend[] = await Promise.all(
+        friendsData.map(async (f) => {
+          // Get last message with this friend
+          const messages = await getDirectMessages(CURRENT_USER, f.friend_name);
+          const lastMessage =
+            messages.length > 0 ? messages[messages.length - 1] : null;
+
+          return {
+            id: f.id,
+            name: f.friend_name,
+            message: lastMessage ? lastMessage.text : "No messages yet",
+            avatar: getAvatarColor(f.friend_name),
+            online: Math.random() > 0.5, // Random for now, add real status later
+          };
+        })
+      );
+
+      setChannels(displayChannels);
+      setFriends(displayFriends);
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleCreateChannel = async (
     channelName: string,
-    selectedFriends: typeof DUMMY_FRIENDS
+    selectedFriends: Friend[]
   ) => {
-    const newChannel: Channel = {
-      id: channels.length + 1,
-      name: channelName,
-      members: selectedFriends.length,
-      memberNames: selectedFriends.map((f) => f.name),
-    };
-    setChannels([...channels, newChannel]);
+    try {
+      // Create channel in Supabase
+      const memberNames = selectedFriends.map((f) => f.name).join(", ");
+      const newChannel = await createChannel(
+        channelName,
+        `Members: ${memberNames}`
+      );
+
+      if (newChannel) {
+        // Add to local state
+        const displayChannel: Channel = {
+          id: newChannel.id,
+          name: newChannel.name,
+          members: selectedFriends.length,
+          memberNames: selectedFriends.map((f) => f.name),
+        };
+        setChannels([displayChannel, ...channels]);
+      }
+    } catch (error) {
+      console.error("Error creating channel:", error);
+    }
   };
 
   // If viewing channel detail, show the detail screen
@@ -223,45 +240,62 @@ export default function MessagingPage() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Friends</Text>
-            <TouchableOpacity style={styles.addButton}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddFriendModal(true)}
+            >
               <AddFriendIcon />
             </TouchableOpacity>
           </View>
 
           <View style={styles.friendsList}>
-            {DUMMY_FRIENDS.map((friend) => (
-              <TouchableOpacity
-                key={friend.id}
-                style={styles.friendItem}
-                onPress={() => setSelectedFriend(friend)}
-              >
-                <View style={styles.friendContent}>
-                  <View style={styles.avatarContainer}>
-                    <View
-                      style={[
-                        styles.avatar,
-                        { backgroundColor: friend.avatar },
-                      ]}
-                    >
-                      <Text style={styles.avatarText}>
-                        {friend.name.charAt(0)}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#DC2626" />
+                <Text style={styles.loadingText}>Loading friends...</Text>
+              </View>
+            ) : friends.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No friends yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap the + button to add friends
+                </Text>
+              </View>
+            ) : (
+              friends.map((friend) => (
+                <TouchableOpacity
+                  key={friend.id}
+                  style={styles.friendItem}
+                  onPress={() => setSelectedFriend(friend)}
+                >
+                  <View style={styles.friendContent}>
+                    <View style={styles.avatarContainer}>
+                      <View
+                        style={[
+                          styles.avatar,
+                          { backgroundColor: friend.avatar },
+                        ]}
+                      >
+                        <Text style={styles.avatarText}>
+                          {friend.name.charAt(0)}
+                        </Text>
+                      </View>
+                      {friend.online && (
+                        <View style={styles.onlineIndicator}>
+                          <OnlineIndicator />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.friendInfo}>
+                      <Text style={styles.friendName}>{friend.name}</Text>
+                      <Text style={styles.friendMessage} numberOfLines={1}>
+                        {friend.message}
                       </Text>
                     </View>
-                    {friend.online && (
-                      <View style={styles.onlineIndicator}>
-                        <OnlineIndicator />
-                      </View>
-                    )}
                   </View>
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{friend.name}</Text>
-                    <Text style={styles.friendMessage} numberOfLines={1}>
-                      {friend.message}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </View>
 
@@ -278,23 +312,39 @@ export default function MessagingPage() {
           </View>
 
           <View style={styles.channelsList}>
-            {channels.map((channel) => (
-              <TouchableOpacity
-                key={channel.id}
-                style={styles.channelItem}
-                onPress={() => setSelectedChannel(channel)}
-              >
-                <View style={styles.channelIcon}>
-                  <ChannelIcon />
-                </View>
-                <View style={styles.channelInfo}>
-                  <Text style={styles.channelName}>{channel.name}</Text>
-                  <Text style={styles.channelMembers}>
-                    {channel.members} members
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#DC2626" />
+                <Text style={styles.loadingText}>Loading channels...</Text>
+              </View>
+            ) : channels.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No channels yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap the + button to create a channel
+                </Text>
+              </View>
+            ) : (
+              channels.map((channel) => (
+                <TouchableOpacity
+                  key={channel.id}
+                  style={styles.channelItem}
+                  onPress={() => setSelectedChannel(channel)}
+                >
+                  <View style={styles.channelIcon}>
+                    <ChannelIcon />
+                  </View>
+                  <View style={styles.channelInfo}>
+                    <Text style={styles.channelName}>{channel.name}</Text>
+                    <Text style={styles.channelMembers}>
+                      {channel.members > 0
+                        ? `${channel.members} members`
+                        : "No members yet"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
@@ -304,7 +354,15 @@ export default function MessagingPage() {
         visible={showCreateChannelModal}
         onClose={() => setShowCreateChannelModal(false)}
         onCreateChannel={handleCreateChannel}
-        friends={DUMMY_FRIENDS}
+        friends={friends}
+      />
+
+      <AddFriendModal
+        visible={showAddFriendModal}
+        onClose={() => setShowAddFriendModal(false)}
+        currentUserName={CURRENT_USER}
+        currentUserEmail={CURRENT_USER_EMAIL}
+        onSuccess={loadData}
       />
     </View>
   );
@@ -427,5 +485,31 @@ const styles = StyleSheet.create({
   channelMembers: {
     fontSize: 13,
     color: "#999",
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: "#999",
+    fontSize: 14,
+    textAlign: "center",
   },
 });

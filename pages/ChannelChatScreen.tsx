@@ -1,5 +1,11 @@
-import { useState } from "react";
 import {
+  getChannelMessages,
+  sendMessageToChannel,
+} from "@/supabase/supabaseClient";
+import type { Channel } from "@/types/messaging";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,13 +15,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 
 // SVG Icons
@@ -55,15 +54,11 @@ const InfoIcon = () => (
   </Svg>
 );
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
+// Current user (replace with actual auth later)
+const CURRENT_USER = "Lee";
 
 interface Message {
-  id: number;
+  id: string;
   text: string;
   sender: string;
   timestamp: string;
@@ -75,86 +70,80 @@ interface ChannelChatScreenProps {
   onInfoPress: () => void;
 }
 
-// Dummy messages for channel
-const DUMMY_CHANNEL_MESSAGES: Message[] = [
-  {
-    id: 1,
-    text: "Hey everyone! Welcome to the channel.",
-    sender: "Sarah Johnson",
-    timestamp: "10:30 AM",
-  },
-  {
-    id: 2,
-    text: "Thanks for creating this!",
-    sender: "Mike Chen",
-    timestamp: "10:32 AM",
-  },
-  {
-    id: 3,
-    text: "Great to have everyone here.",
-    sender: "You",
-    timestamp: "10:33 AM",
-  },
-  {
-    id: 4,
-    text: "Let's get started on the project!",
-    sender: "Emily Davis",
-    timestamp: "10:35 AM",
-  },
-];
-
 export default function ChannelChatScreen({
   channel,
   onBack,
   onInfoPress,
 }: ChannelChatScreenProps) {
-  const [messages, setMessages] = useState<Message[]>(DUMMY_CHANNEL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
-  // Swipe gesture animations
-  const translateX = useSharedValue(0);
+  // Load messages on mount
+  useEffect(() => {
+    loadMessages();
+  }, [channel.id]);
 
-  const handleSwipeBack = () => {
-    onBack();
-  };
+  async function loadMessages() {
+    setLoading(true);
+    try {
+      const supabaseMessages = await getChannelMessages(channel.id);
 
-  // Pan gesture for swiping right to go back
-  const panGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      // Only allow swiping right (positive X)
-      if (event.translationX > 0) {
-        translateX.value = event.translationX;
-      }
-    })
-    .onEnd((event) => {
-      // If swiped more than 100px, go back
-      if (event.translationX > 100) {
-        translateX.value = withSpring(500, {}, () => {
-          runOnJS(handleSwipeBack)();
-        });
-      } else {
-        // Otherwise snap back
-        translateX.value = withSpring(0);
-      }
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
-  const handleSend = () => {
-    if (inputText.trim()) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: inputText,
-        sender: "You",
-        timestamp: new Date().toLocaleTimeString([], {
+      // Transform Supabase messages to display format
+      const displayMessages: Message[] = supabaseMessages.map((msg) => ({
+        id: msg.id,
+        text: msg.text,
+        sender: msg.sender_name === CURRENT_USER ? "You" : msg.sender_name,
+        timestamp: new Date(msg.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         }),
-      };
-      setMessages([...messages, newMessage]);
-      setInputText("");
+      }));
+
+      setMessages(displayMessages);
+    } catch (error) {
+      console.error("Error loading channel messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleSend = async () => {
+    if (inputText.trim() && !sending) {
+      setSending(true);
+      try {
+        // Save message to Supabase
+        const savedMessage = await sendMessageToChannel(
+          channel.id,
+          CURRENT_USER,
+          inputText.trim()
+        );
+
+        if (savedMessage) {
+          // Add message to local state
+          const newMessage: Message = {
+            id: savedMessage.id,
+            text: savedMessage.text,
+            sender: "You",
+            timestamp: new Date(savedMessage.created_at).toLocaleTimeString(
+              [],
+              {
+                hour: "2-digit",
+                minute: "2-digit",
+              }
+            ),
+          };
+          setMessages([...messages, newMessage]);
+          setInputText("");
+        } else {
+          console.error("Failed to send message");
+        }
+      } catch (error) {
+        console.error("Error sending channel message:", error);
+      } finally {
+        setSending(false);
+      }
     }
   };
 
@@ -165,40 +154,54 @@ export default function ChannelChatScreen({
   };
 
   return (
-    <GestureDetector gesture={panGesture}>
-      <Animated.View style={[styles.container, animatedStyle]}>
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-              <BackIcon />
-            </TouchableOpacity>
-            <View style={styles.headerInfo}>
-              <Text style={styles.headerName}>{channel.name}</Text>
-              <Text style={styles.memberCount}>{channel.members} members</Text>
-            </View>
-            <TouchableOpacity onPress={onInfoPress} style={styles.infoButton}>
-              <InfoIcon />
-            </TouchableOpacity>
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <BackIcon />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerName}>{channel.name}</Text>
+            <Text style={styles.memberCount}>{channel.members} members</Text>
           </View>
+          <TouchableOpacity onPress={onInfoPress} style={styles.infoButton}>
+            <InfoIcon />
+          </TouchableOpacity>
+        </View>
 
-          {/* Messages */}
-          <ScrollView
-            style={styles.messagesContainer}
-            contentContainerStyle={styles.messagesContent}
-          >
-            {/* Channel Created Indicator */}
+        {/* Messages */}
+        <ScrollView
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+        >
+          {/* Channel Created Indicator */}
+          {channel.memberNames && channel.memberNames.length > 0 && (
             <View style={styles.systemMessage}>
               <Text style={styles.systemMessageText}>
-                Channel created with {channel.memberNames?.join(", ")}
+                Channel created with {channel.memberNames.join(", ")}
               </Text>
             </View>
+          )}
 
-            {messages.map((message) => {
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#DC2626" />
+              <Text style={styles.loadingText}>Loading messages...</Text>
+            </View>
+          ) : messages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>
+                Be the first to send a message in this channel!
+              </Text>
+            </View>
+          ) : (
+            messages.map((message) => {
               const isMe = message.sender === "You";
               return (
                 <View
@@ -234,30 +237,37 @@ export default function ChannelChatScreen({
                   <Text style={styles.timestamp}>{message.timestamp}</Text>
                 </View>
               );
-            })}
-          </ScrollView>
+            })
+          )}
+        </ScrollView>
 
-          {/* Input */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Type a message..."
-              placeholderTextColor="#666"
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-            />
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={handleSend}
-              disabled={!inputText.trim()}
-            >
+        {/* Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#666"
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!inputText.trim() || sending) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
               <SendIcon />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Animated.View>
-    </GestureDetector>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -403,5 +413,37 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
+  },
+  sendButtonDisabled: {
+    backgroundColor: "#666",
+    opacity: 0.5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: "#999",
+    fontSize: 14,
+    textAlign: "center",
   },
 });

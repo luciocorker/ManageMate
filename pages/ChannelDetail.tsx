@@ -1,3 +1,4 @@
+import type { Channel } from "@/types/messaging";
 import {
   ScrollView,
   StyleSheet,
@@ -5,13 +6,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
 // SVG Icons
@@ -60,13 +54,6 @@ const UsersIcon = () => (
   </Svg>
 );
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
-
 interface ChannelDetailProps {
   channel: Channel;
   onBack: () => void;
@@ -75,92 +62,59 @@ interface ChannelDetailProps {
 export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
 
-  // Swipe gesture animations
-  const translateX = useSharedValue(0);
-
-  const handleSwipeBack = () => {
-    onBack();
-  };
-
-  // Pan gesture for swiping right to go back
-  const panGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      // Only allow swiping right (positive X)
-      if (event.translationX > 0) {
-        translateX.value = event.translationX;
-      }
-    })
-    .onEnd((event) => {
-      // If swiped more than 100px, go back
-      if (event.translationX > 100) {
-        translateX.value = withSpring(500, {}, () => {
-          runOnJS(handleSwipeBack)();
-        });
-      } else {
-        // Otherwise snap back
-        translateX.value = withSpring(0);
-      }
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
-
   return (
-    <GestureDetector gesture={panGesture}>
-      <Animated.View style={[styles.container, animatedStyle]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <BackIcon />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{channel.name}</Text>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <BackIcon />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{channel.name}</Text>
+      </View>
+
+      <ScrollView style={styles.content}>
+        {/* Channel Info */}
+        <View style={styles.infoSection}>
+          <View style={styles.channelIcon}>
+            <UsersIcon />
+          </View>
+          <Text style={styles.channelName}>{channel.name}</Text>
+          <Text style={styles.memberCount}>{channel.members} members</Text>
         </View>
 
-        <ScrollView style={styles.content}>
-          {/* Channel Info */}
-          <View style={styles.infoSection}>
-            <View style={styles.channelIcon}>
-              <UsersIcon />
-            </View>
-            <Text style={styles.channelName}>{channel.name}</Text>
-            <Text style={styles.memberCount}>{channel.members} members</Text>
-          </View>
-
-          {/* Members List */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Members</Text>
-            <View style={styles.membersList}>
-              {channel.memberNames?.map((memberName, index) => (
-                <View key={index} style={styles.memberItem}>
-                  <View
-                    style={[
-                      styles.memberAvatar,
-                      {
-                        backgroundColor:
-                          avatarColors[index % avatarColors.length],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.memberAvatarText}>
-                      {memberName.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text style={styles.memberName}>{memberName}</Text>
+        {/* Members List */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Members</Text>
+          <View style={styles.membersList}>
+            {channel.memberNames?.map((memberName, index) => (
+              <View key={index} style={styles.memberItem}>
+                <View
+                  style={[
+                    styles.memberAvatar,
+                    {
+                      backgroundColor:
+                        avatarColors[index % avatarColors.length],
+                    },
+                  ]}
+                >
+                  <Text style={styles.memberAvatarText}>
+                    {memberName.charAt(0)}
+                  </Text>
                 </View>
-              ))}
-            </View>
+                <Text style={styles.memberName}>{memberName}</Text>
+              </View>
+            ))}
           </View>
+        </View>
 
-          {/* Channel Actions */}
-          <View style={styles.section}>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Open Channel Chat</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </Animated.View>
-    </GestureDetector>
+        {/* Channel Actions */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>Open Channel Chat</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 

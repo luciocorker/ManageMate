@@ -1,3 +1,4 @@
+import type { Friend } from "@/types/messaging";
 import {
   ScrollView,
   StyleSheet,
@@ -62,14 +63,6 @@ const PhoneIcon = () => (
     />
   </Svg>
 );
-
-interface Friend {
-  id: number;
-  name: string;
-  message: string;
-  avatar: string;
-  online: boolean;
-}
 
 interface ProfilePageProps {
   friend: Friend;
