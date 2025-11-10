@@ -1,7 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
 import { Project } from '@/types/project';
 import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -38,7 +37,7 @@ export function ProjectActionsMenu({
   onArchive,
   onDelete,
 }: ProjectActionsMenuProps) {
-  const iconColor = useThemeColor({}, 'icon');
+  const iconColor = '#999';
 
   const actions: ActionItem[] = [
     {
@@ -119,8 +118,8 @@ export function ProjectActionsMenu({
       >
         <ThemedView 
           style={styles.menu}
-          lightColor="#fff"
-          darkColor="#1f2937"
+          lightColor="#1e1e1e"
+          darkColor="#1e1e1e"
         >
           <View style={styles.header}>
             <ThemedText style={styles.title}>{project.name}</ThemedText>
