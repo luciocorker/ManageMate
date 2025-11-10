@@ -1,4 +1,5 @@
 import CreateChannelModal from "@/components/CreateChannelModal";
+import ChannelChatScreen from "@/pages/ChannelChatScreen";
 import ChannelDetail from "@/pages/ChannelDetail";
 import ChatScreen from "@/pages/ChatScreen";
 import { useState } from "react";
@@ -159,6 +160,7 @@ export default function MessagingPage() {
     (typeof DUMMY_FRIENDS)[0] | null
   >(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [showChannelDetail, setShowChannelDetail] = useState(false);
   const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
 
@@ -175,12 +177,26 @@ export default function MessagingPage() {
     setChannels([...channels, newChannel]);
   };
 
-  // If a channel is selected, show the channel detail screen
-  if (selectedChannel) {
+  // If viewing channel detail, show the detail screen
+  if (selectedChannel && showChannelDetail) {
     return (
       <ChannelDetail
         channel={selectedChannel}
+        onBack={() => {
+          setShowChannelDetail(false);
+          setSelectedChannel(null);
+        }}
+      />
+    );
+  }
+
+  // If a channel is selected, show the channel chat screen
+  if (selectedChannel) {
+    return (
+      <ChannelChatScreen
+        channel={selectedChannel}
         onBack={() => setSelectedChannel(null)}
+        onInfoPress={() => setShowChannelDetail(true)}
       />
     );
   }
