@@ -30,6 +30,11 @@ export interface Friend {
   created_at: string;
 }
 
+// Friend with profile information (for display)
+export interface FriendWithProfile extends Friend {
+  profile?: UserProfile;
+}
+
 // Channel for group messaging
 export interface Channel {
   id: string;

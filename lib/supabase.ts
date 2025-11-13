@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl ?? "";
@@ -31,17 +32,44 @@ if (!supabaseUrl.startsWith("http://") && !supabaseUrl.startsWith("https://")) {
 
 console.log("✅ Supabase configured:", supabaseUrl.substring(0, 30) + "...");
 
-// Custom storage adapter for React Native using expo-secure-store
-const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => {
-    return SecureStore.getItemAsync(key);
-  },
-  setItem: (key: string, value: string) => {
-    SecureStore.setItemAsync(key, value);
-  },
-  removeItem: (key: string) => {
-    SecureStore.deleteItemAsync(key);
-  },
+// Custom storage adapter that works on both web and native
+const createStorageAdapter = () => {
+  // Use localStorage for web, SecureStore for native
+  if (Platform.OS === "web") {
+    return {
+      getItem: (key: string) => {
+        if (typeof localStorage !== "undefined") {
+          return Promise.resolve(localStorage.getItem(key));
+        }
+        return Promise.resolve(null);
+      },
+      setItem: (key: string, value: string) => {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(key, value);
+        }
+        return Promise.resolve();
+      },
+      removeItem: (key: string) => {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem(key);
+        }
+        return Promise.resolve();
+      },
+    };
+  } else {
+    // Native platforms (iOS, Android)
+    return {
+      getItem: (key: string) => {
+        return SecureStore.getItemAsync(key);
+      },
+      setItem: (key: string, value: string) => {
+        return SecureStore.setItemAsync(key, value);
+      },
+      removeItem: (key: string) => {
+        return SecureStore.deleteItemAsync(key);
+      },
+    };
+  }
 };
 
 // Check if Supabase credentials are configured
@@ -65,10 +93,10 @@ export const supabase = createClient(
   supabaseAnonKey || "placeholder-key",
   {
     auth: {
-      storage: ExpoSecureStoreAdapter,
+      storage: createStorageAdapter(),
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: Platform.OS === "web",
     },
   }
 );

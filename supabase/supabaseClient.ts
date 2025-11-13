@@ -43,19 +43,21 @@ export async function createChannel(
  */
 export async function getChannels(): Promise<Channel[]> {
   try {
+    console.log("🔍 getChannels called");
     const { data, error } = await supabase
       .from("channels")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching channels:", error);
+      console.error("❌ Error fetching channels:", error);
       return [];
     }
 
+    console.log(`  ✅ Retrieved ${data?.length || 0} channels from database`);
     return data || [];
   } catch (error) {
-    console.error("Unexpected error fetching channels:", error);
+    console.error("❌ Unexpected error fetching channels:", error);
     return [];
   }
 }
@@ -141,14 +143,14 @@ export async function addFriend(
 }
 
 /**
- * Get all friends for a user
+ * Get all friends for a user by Firebase UID
  */
-export async function getFriends(userName: string): Promise<Friend[]> {
+export async function getFriends(userId: string): Promise<Friend[]> {
   try {
     const { data, error } = await supabase
       .from("friends")
       .select("*")
-      .eq("user_name", userName)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -163,26 +165,117 @@ export async function getFriends(userName: string): Promise<Friend[]> {
   }
 }
 
+/**
+ * Get user profile by Firebase UID
+ */
+export async function getUserProfile(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("firebase_uid", userId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching user profile:", error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Unexpected error fetching user profile:", error);
+    return null;
+  }
+}
+
+/**
+ * Get multiple user profiles by Firebase UIDs
+ */
+export async function getUserProfiles(userIds: string[]) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .in("firebase_uid", userIds);
+
+    if (error) {
+      console.error("Error fetching user profiles:", error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error("Unexpected error fetching user profiles:", error);
+    return [];
+  }
+}
+
+/**
+ * Get friends with their profile information
+ */
+export async function getFriendsWithProfiles(userId: string) {
+  try {
+    console.log("🔍 getFriendsWithProfiles called for userId:", userId);
+    
+    // Get friend relationships
+    const friends = await getFriends(userId);
+    console.log(`  - Found ${friends.length} friend relationships`);
+    
+    if (friends.length === 0) {
+      console.log("  - No friends found, returning empty array");
+      return [];
+    }
+
+    // Get all friend profiles
+    const friendIds = friends.map(f => f.friend_id);
+    console.log(`  - Fetching profiles for friend IDs:`, friendIds);
+    
+    const profiles = await getUserProfiles(friendIds);
+    console.log(`  - Retrieved ${profiles.length} profiles`);
+
+    // Create a map of profiles by firebase_uid
+    const profileMap = new Map(profiles.map(p => [p.firebase_uid, p]));
+
+    // Combine friends with their profiles
+    const result = friends.map(friend => {
+      const profile = profileMap.get(friend.friend_id);
+      if (!profile) {
+        console.warn(`  ⚠️ No profile found for friend_id: ${friend.friend_id}`);
+      }
+      return {
+        ...friend,
+        profile: profile,
+      };
+    });
+    
+    console.log(`  ✅ Returning ${result.length} friends with profiles`);
+    return result;
+  } catch (error) {
+    console.error("❌ Error fetching friends with profiles:", error);
+    return [];
+  }
+}
+
 // ==========================================
 // MESSAGE FUNCTIONS
 // ==========================================
 
 /**
- * Send a message to a channel
+ * Send a message to a channel by Firebase UID
  */
 export async function sendMessageToChannel(
   channelId: string,
-  senderName: string,
-  text: string
+  senderId: string,
+  content: string
 ): Promise<Message | null> {
   try {
     const { data, error } = await supabase
       .from("messages")
       .insert({
         channel_id: channelId,
-        sender_name: senderName,
-        text,
-        receiver_name: null,
+        sender_id: senderId,
+        content: content,
+        receiver_id: null,
       })
       .select()
       .single();
@@ -200,21 +293,21 @@ export async function sendMessageToChannel(
 }
 
 /**
- * Send a direct message to a friend
+ * Send a direct message to a friend by Firebase UIDs
  */
 export async function sendMessageToFriend(
-  senderName: string,
-  receiverName: string,
-  text: string
+  senderId: string,
+  receiverId: string,
+  content: string
 ): Promise<Message | null> {
   try {
     const { data, error } = await supabase
       .from("messages")
       .insert({
         channel_id: null,
-        sender_name: senderName,
-        receiver_name: receiverName,
-        text,
+        sender_id: senderId,
+        receiver_id: receiverId,
+        content: content,
       })
       .select()
       .single();
@@ -257,30 +350,33 @@ export async function getChannelMessages(
 }
 
 /**
- * Get all direct messages between two users
+ * Get all direct messages between two users by Firebase UIDs
  */
 export async function getDirectMessages(
-  senderName: string,
-  receiverName: string
+  userId1: string,
+  userId2: string
 ): Promise<Message[]> {
   try {
+    console.log(`🔍 getDirectMessages called for users: ${userId1} <-> ${userId2}`);
+    
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .is("channel_id", null)
       .or(
-        `and(sender_name.eq.${senderName},receiver_name.eq.${receiverName}),and(sender_name.eq.${receiverName},receiver_name.eq.${senderName})`
+        `and(sender_id.eq.${userId1},receiver_id.eq.${userId2}),and(sender_id.eq.${userId2},receiver_id.eq.${userId1})`
       )
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("Error fetching direct messages:", error);
+      console.error("❌ Error fetching direct messages:", error);
       return [];
     }
 
+    console.log(`  ✅ Retrieved ${data?.length || 0} messages`);
     return data || [];
   } catch (error) {
-    console.error("Unexpected error fetching direct messages:", error);
+    console.error("❌ Unexpected error fetching direct messages:", error);
     return [];
   }
 }
@@ -337,18 +433,45 @@ export async function getDirectMessages(
 
 /**
  * Send a friend request
+ * Looks up the receiver by email and creates a friend request
  */
 export async function sendFriendRequest(
   input: CreateFriendRequestInput
 ): Promise<FriendRequest | null> {
   try {
+    // First, look up the receiver by email
+    const { data: receiverData, error: receiverError } = await supabase
+      .from("users")
+      .select("firebase_uid")
+      .eq("email", input.receiver_email.toLowerCase())
+      .single();
+
+    if (receiverError || !receiverData) {
+      console.error("Receiver not found:", receiverError);
+      // Return a special error to indicate user not found
+      return null;
+    }
+
+    // Check if a friend request already exists
+    const { data: existingRequest, error: checkError } = await supabase
+      .from("friend_requests")
+      .select("*")
+      .eq("sender_id", input.sender_id)
+      .eq("receiver_id", receiverData.firebase_uid)
+      .single();
+
+    if (existingRequest) {
+      console.log("Friend request already exists");
+      return existingRequest;
+    }
+
+    // Create the friend request
     const { data, error } = await supabase
       .from("friend_requests")
       .insert([
         {
           sender_id: input.sender_id,
-          receiver_id: input.receiver_email,
-          receiver_email: input.receiver_email,
+          receiver_id: receiverData.firebase_uid,
           status: "pending",
         },
       ])
@@ -415,16 +538,16 @@ export async function getFriendRequests(
 }
 
 /**
- * Get only pending friend requests for a user
+ * Get only pending friend requests for a user by Firebase UID
  */
 export async function getPendingFriendRequests(
-  userName: string
+  userId: string
 ): Promise<FriendRequest[]> {
   try {
     const { data, error } = await supabase
       .from("friend_requests")
       .select("*")
-      .eq("receiver_name", userName)
+      .eq("receiver_id", userId)
       .eq("status", "pending")
       .order("created_at", { ascending: false });
 
@@ -433,11 +556,40 @@ export async function getPendingFriendRequests(
       return [];
     }
 
-    console.log(`Pending friend requests for ${userName}:`, data?.length || 0);
+    console.log(`Pending friend requests for user:`, data?.length || 0);
     return data || [];
   } catch (error) {
     console.error("Exception in getPendingFriendRequests:", error);
     return [];
+  }
+}
+
+/**
+ * Get a friend request by ID with sender information
+ */
+export async function getFriendRequestById(requestId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("friend_requests")
+      .select("*")
+      .eq("id", requestId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching friend request:", error);
+      return null;
+    }
+
+    // Get sender info
+    const senderProfile = await getUserProfile(data.sender_id);
+
+    return {
+      ...data,
+      senderProfile,
+    };
+  } catch (error) {
+    console.error("Exception in getFriendRequestById:", error);
+    return null;
   }
 }
 
@@ -447,7 +599,7 @@ export async function getPendingFriendRequests(
  */
 export async function acceptFriendRequest(
   requestId: string,
-  userName: string
+  userId: string
 ): Promise<boolean> {
   try {
     // First, get the friend request details
@@ -463,7 +615,7 @@ export async function acceptFriendRequest(
     }
 
     // Verify the user is the receiver
-    if (request.receiver_name !== userName) {
+    if (request.receiver_id !== userId) {
       console.error("User is not the receiver of this friend request");
       return false;
     }
@@ -482,12 +634,12 @@ export async function acceptFriendRequest(
     // Add both users to each other's friends list
     const { error: friendError } = await supabase.from("friends").insert([
       {
-        user_name: request.receiver_name,
-        friend_name: request.sender_name,
+        user_id: request.receiver_id,
+        friend_id: request.sender_id,
       },
       {
-        user_name: request.sender_name,
-        friend_name: request.receiver_name,
+        user_id: request.sender_id,
+        friend_id: request.receiver_id,
       },
     ]);
 
@@ -510,13 +662,13 @@ export async function acceptFriendRequest(
  */
 export async function rejectFriendRequest(
   requestId: string,
-  userName: string
+  userId: string
 ): Promise<boolean> {
   try {
     // First verify the user is the receiver
     const { data: request, error: fetchError } = await supabase
       .from("friend_requests")
-      .select("receiver_name")
+      .select("receiver_id")
       .eq("id", requestId)
       .single();
 
@@ -525,7 +677,7 @@ export async function rejectFriendRequest(
       return false;
     }
 
-    if (request.receiver_name !== userName) {
+    if (request.receiver_id !== userId) {
       console.error("User is not the receiver of this friend request");
       return false;
     }
@@ -698,19 +850,17 @@ export async function getMessagesReactionsSummary(
 // ==================== Channel Member Functions ====================
 
 /**
- * Add a member to a channel
+ * Add a member to a channel by Firebase UID
  */
 export async function addChannelMember(
   channelId: string,
-  userName: string,
-  addedBy: string
+  userId: string
 ): Promise<boolean> {
   try {
     const { error } = await supabase.from("channel_members").insert([
       {
         channel_id: channelId,
-        user_name: userName,
-        added_by: addedBy,
+        user_id: userId,
       },
     ]);
 
@@ -724,7 +874,7 @@ export async function addChannelMember(
       return false;
     }
 
-    console.log(`Member ${userName} added to channel ${channelId}`);
+    console.log(`Member ${userId} added to channel ${channelId}`);
     return true;
   } catch (error) {
     console.error("Exception in addChannelMember:", error);
@@ -733,18 +883,17 @@ export async function addChannelMember(
 }
 
 /**
- * Add multiple members to a channel
+ * Add multiple members to a channel by Firebase UIDs
  */
 export async function addChannelMembers(
   channelId: string,
-  userNames: string[],
+  userIds: string[],
   addedBy: string
 ): Promise<boolean> {
   try {
-    const members = userNames.map((userName) => ({
+    const members = userIds.map((userId) => ({
       channel_id: channelId,
-      user_name: userName,
-      added_by: addedBy,
+      user_id: userId,
     }));
 
     const { error } = await supabase.from("channel_members").insert(members);
@@ -754,7 +903,7 @@ export async function addChannelMembers(
       return false;
     }
 
-    console.log(`${userNames.length} members added to channel ${channelId}`);
+    console.log(`${userIds.length} members added to channel ${channelId}`);
     return true;
   } catch (error) {
     console.error("Exception in addChannelMembers:", error);
@@ -763,25 +912,25 @@ export async function addChannelMembers(
 }
 
 /**
- * Remove a member from a channel
+ * Remove a member from a channel by Firebase UID
  */
 export async function removeChannelMember(
   channelId: string,
-  userName: string
+  userId: string
 ): Promise<boolean> {
   try {
     const { error } = await supabase
       .from("channel_members")
       .delete()
       .eq("channel_id", channelId)
-      .eq("user_name", userName);
+      .eq("user_id", userId);
 
     if (error) {
       console.error("Error removing channel member:", error);
       return false;
     }
 
-    console.log(`Member ${userName} removed from channel ${channelId}`);
+    console.log(`Member ${userId} removed from channel ${channelId}`);
     return true;
   } catch (error) {
     console.error("Exception in removeChannelMember:", error);
@@ -790,13 +939,13 @@ export async function removeChannelMember(
 }
 
 /**
- * Get all members of a channel
+ * Get all members of a channel (returns Firebase UIDs)
  */
 export async function getChannelMembers(channelId: string): Promise<string[]> {
   try {
     const { data, error } = await supabase
       .from("channel_members")
-      .select("user_name")
+      .select("user_id")
       .eq("channel_id", channelId);
 
     if (error) {
@@ -804,7 +953,7 @@ export async function getChannelMembers(channelId: string): Promise<string[]> {
       return [];
     }
 
-    return data?.map((member) => member.user_name) || [];
+    return data?.map((member) => member.user_id) || [];
   } catch (error) {
     console.error("Exception in getChannelMembers:", error);
     return [];
@@ -812,14 +961,14 @@ export async function getChannelMembers(channelId: string): Promise<string[]> {
 }
 
 /**
- * Get all channels a user is a member of
+ * Get all channels a user is a member of by Firebase UID
  */
-export async function getUserChannels(userName: string): Promise<Channel[]> {
+export async function getUserChannels(userId: string): Promise<Channel[]> {
   try {
     const { data, error } = await supabase
       .from("channel_members")
       .select("channel_id, channels(*)")
-      .eq("user_name", userName);
+      .eq("user_id", userId);
 
     if (error) {
       console.error("Error fetching user channels:", error);
@@ -840,18 +989,18 @@ export async function getUserChannels(userName: string): Promise<Channel[]> {
 }
 
 /**
- * Check if a user is a member of a channel
+ * Check if a user is a member of a channel by Firebase UID
  */
 export async function isChannelMember(
   channelId: string,
-  userName: string
+  userId: string
 ): Promise<boolean> {
   try {
     const { data, error } = await supabase
       .from("channel_members")
       .select("id")
       .eq("channel_id", channelId)
-      .eq("user_name", userName)
+      .eq("user_id", userId)
       .single();
 
     if (error && error.code !== "PGRST116") {

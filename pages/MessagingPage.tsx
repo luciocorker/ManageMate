@@ -35,7 +35,7 @@ import {
   getChannelMembers,
   getChannels,
   getDirectMessages,
-  getFriends,
+  getFriendsWithProfiles,
 } from "@/supabase/supabaseClient";
 import { useEffect, useState } from "react";
 import {
@@ -173,61 +173,92 @@ export default function MessagingPage() {
   }, [authLoading]);
 
   async function loadData() {
-    // Get current user or use placeholder
-    const currentUser = user || { name: "TestUser", email: "test@example.com" };
+    if (!user) {
+      console.log("⚠️ No user found, skipping data load");
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
-    console.log("📊 Loading messenger data for user:", currentUser.name);
+    console.log("📊 Loading messenger data for user:", user.email, "UID:", user.id);
 
     try {
-      // Load channels and friends from Supabase
-      const [channelsData, friendsData] = await Promise.all([
+      // Load channels and friends from Supabase using Firebase UID
+      console.log("🔄 Fetching channels and friends from Supabase...");
+      const [channelsData, friendsWithProfiles] = await Promise.all([
         getChannels(),
-        getFriends(currentUser.name),
+        getFriendsWithProfiles(user.id),
       ]);
 
-      console.log("📊 Loaded channels:", channelsData.length);
-      console.log("📊 Loaded friends:", friendsData.length);
+      console.log("📊 Raw data loaded:");
+      console.log("  - Channels:", channelsData.length);
+      console.log("  - Friends with profiles:", friendsWithProfiles.length);
+
+      if (channelsData.length > 0) {
+        console.log("  - Sample channel:", channelsData[0]);
+      }
+      if (friendsWithProfiles.length > 0) {
+        console.log("  - Sample friend:", friendsWithProfiles[0]);
+      }
 
       // Transform Supabase channels to display format with member counts
       const displayChannels: Channel[] = await Promise.all(
         channelsData.map(async (ch) => {
-          const memberNames = await getChannelMembers(ch.id);
+          const memberIds = await getChannelMembers(ch.id);
+          console.log(`  - Channel "${ch.name}" has ${memberIds.length} members`);
           return {
             id: ch.id,
             name: ch.name,
-            members: memberNames.length,
-            memberNames: memberNames,
+            members: memberIds.length,
+            memberNames: memberIds, // These are Firebase UIDs
           };
         })
       );
 
       // Transform Supabase friends to display format with last message
       const displayFriends: Friend[] = await Promise.all(
-        friendsData.map(async (f) => {
-          // Get last message with this friend
-          const messages = await getDirectMessages(
-            currentUser.name,
-            f.friend_id
-          );
+        friendsWithProfiles.map(async (f) => {
+          const profile = f.profile;
+          
+          console.log(`  - Processing friend: ${profile?.full_name || profile?.email}`);
+          
+          // Get last message with this friend using Firebase UIDs
+          const messages = await getDirectMessages(user.id, f.friend_id);
           const lastMessage =
             messages.length > 0 ? messages[messages.length - 1] : null;
 
+          console.log(`    - Messages with this friend: ${messages.length}`);
+          if (lastMessage) {
+            console.log(`    - Last message: "${lastMessage.content.substring(0, 30)}..."`);
+          }
+
           return {
-            id: f.id,
-            name: f.friend_id,
+            id: f.friend_id, // Use friend's Firebase UID as ID
+            name: profile?.full_name || profile?.email || "Unknown User",
+            email: profile?.email,
             message: lastMessage ? lastMessage.content : "No messages yet",
-            avatar: getAvatarColor(f.friend_id),
-            online: Math.random() > 0.5, // Random for now, add real status later
+            avatar: getAvatarColor(profile?.full_name || profile?.email || ""),
+            online: false, // TODO: Add real-time presence
+            bio: profile?.bio,
+            phone: profile?.phone_number,
+            profileImage: profile?.profile_picture_url,
+            joinDate: profile?.created_at
+              ? new Date(profile.created_at).toLocaleDateString()
+              : "Recently",
           };
         })
       );
 
+      console.log("✅ Data transformation complete:");
+      console.log("  - Display channels:", displayChannels.length);
+      console.log("  - Display friends:", displayFriends.length);
+
       setChannels(displayChannels);
       setFriends(displayFriends);
-      console.log("✅ Messenger data loaded successfully");
+      console.log("✅ Messenger data loaded and state updated successfully");
     } catch (error) {
       console.error("❌ Error loading messenger data:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
     } finally {
       setLoading(false);
     }
@@ -237,7 +268,7 @@ export default function MessagingPage() {
     channelName: string,
     selectedFriends: Friend[]
   ) => {
-    const currentUser = user || { name: "TestUser", email: "test@example.com" };
+    if (!user) return;
 
     try {
       // Create channel in Supabase
@@ -248,18 +279,18 @@ export default function MessagingPage() {
       );
 
       if (newChannel) {
-        // Add selected friends as channel members
-        const friendNames = selectedFriends.map((f) => f.name);
+        // Add selected friends as channel members using Firebase UIDs
+        const friendIds = selectedFriends.map((f) => f.id);
         // Also add the current user as a member
-        const allMembers = [currentUser.name, ...friendNames];
-        await addChannelMembers(newChannel.id, allMembers, currentUser.name);
+        const allMemberIds = [user.id, ...friendIds];
+        await addChannelMembers(newChannel.id, allMemberIds, user.id);
 
         // Add to local state
         const displayChannel: Channel = {
           id: newChannel.id,
           name: newChannel.name,
-          members: allMembers.length,
-          memberNames: allMembers,
+          members: allMemberIds.length,
+          memberNames: [user.name, ...selectedFriends.map((f) => f.name)],
         };
         setChannels([displayChannel, ...channels]);
       }
@@ -358,12 +389,8 @@ export default function MessagingPage() {
             ) : (
               friends.map((friend) => {
                 // ✅ FUNCTIONAL: Get unread count for this friend
-                // Room ID matches the format used in ChatScreen
-                const currentUser = user || {
-                  name: "TestUser",
-                  email: "test@example.com",
-                };
-                const roomId = [currentUser.name, friend.name].sort().join("_");
+                // Room ID uses Firebase UIDs
+                const roomId = user ? [user.id, friend.id].sort().join("_") : "";
                 const unreadCount = getUnreadCount(roomId);
 
                 return (

@@ -1,19 +1,25 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { sendFriendRequest } from "@/supabase/supabaseClient";
-import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
+  Linking,
   Modal,
-  Platform,
-  Share,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+
+// ==========================================
+// ADD FRIEND MODAL - Send Friend Request via Email
+// ==========================================
+// This modal allows users to send friend requests via email.
+// It creates a deep link that the recipient can click to accept the request.
+// Uses Firebase Authentication to identify the sender.
+// ==========================================
 
 interface AddFriendModalProps {
   visible: boolean;
@@ -30,114 +36,115 @@ export default function AddFriendModal({
   currentUserEmail,
   onSuccess,
 }: AddFriendModalProps) {
-  const [friendName, setFriendName] = useState("");
+  const { user } = useAuth();
   const [friendEmail, setFriendEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
   const handleSendRequest = async () => {
-    // Validation
-    if (!friendName.trim()) {
-      Alert.alert("Error", "Please enter your friend's name");
-      return;
-    }
-
     if (!friendEmail.trim()) {
-      Alert.alert("Error", "Please enter your friend's email");
+      Alert.alert("Error", "Please enter a friend's email address");
       return;
     }
 
-    if (!validateEmail(friendEmail)) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(friendEmail.trim())) {
       Alert.alert("Error", "Please enter a valid email address");
       return;
     }
 
-    if (friendName.trim().toLowerCase() === currentUserName.toLowerCase()) {
-      Alert.alert("Error", "You cannot send a friend request to yourself");
+    // Check if trying to add themselves
+    if (friendEmail.trim().toLowerCase() === currentUserEmail.toLowerCase()) {
+      Alert.alert("Error", "You cannot add yourself as a friend");
+      return;
+    }
+
+    if (!user) {
+      Alert.alert("Error", "You must be signed in to send friend requests");
       return;
     }
 
     setLoading(true);
 
     try {
-      const result = await sendFriendRequest({
-        sender_name: currentUserName,
-        sender_email: currentUserEmail,
-        receiver_name: friendName.trim(),
+      // Create friend request in Supabase
+      const friendRequest = await sendFriendRequest({
+        sender_id: user.id, // Firebase UID
         receiver_email: friendEmail.trim().toLowerCase(),
       });
 
-      if (result) {
-        // Generate deep link for friend request
-        const friendRequestUrl = Linking.createURL("friend-request", {
-          queryParams: {
-            requestId: result.id,
-            senderName: currentUserName,
-            receiverEmail: friendEmail.trim().toLowerCase(),
-            receiverName: friendName.trim(),
-          },
-        });
+      if (!friendRequest) {
+        Alert.alert("Error", "Failed to create friend request");
+        setLoading(false);
+        return;
+      }
 
-        console.log("Generated friend request URL:", friendRequestUrl);
+      // Generate deep link for the friend request
+      const deepLink = `managemate://friend-request?requestId=${friendRequest.id}&senderEmail=${encodeURIComponent(currentUserEmail)}&senderName=${encodeURIComponent(currentUserName)}`;
 
-        // Show success and share link
+      // Create email body with the invitation
+      const emailSubject = `${currentUserName} wants to connect on ManageMate`;
+      const emailBody = `Hi there!
+
+${currentUserName} (${currentUserEmail}) has invited you to connect on ManageMate.
+
+Click the link below to accept the friend request:
+${deepLink}
+
+If you don't have ManageMate installed yet, download it first and then click the link.
+
+Best regards,
+The ManageMate Team`;
+
+      // Open email client with pre-filled content
+      const mailtoUrl = `mailto:${friendEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+
+      const canOpen = await Linking.canOpenURL(mailtoUrl);
+      if (canOpen) {
+        await Linking.openURL(mailtoUrl);
+        
         Alert.alert(
-          "Success!",
-          `Friend request created for ${friendName}. Share the invitation link with them.`,
+          "Friend Request Sent!",
+          `An email invitation has been prepared for ${friendEmail}. Send the email to complete the friend request.`,
           [
             {
-              text: "Share Link",
-              onPress: async () => {
-                try {
-                  await Share.share({
-                    message: `${currentUserName} wants to connect with you on ManageMate! Click here to accept: ${friendRequestUrl}`,
-                    title: "Friend Request",
-                  });
-                  setFriendName("");
-                  setFriendEmail("");
-                  onClose();
-                  onSuccess?.();
-                } catch (error) {
-                  console.error("Error sharing:", error);
-                }
-              },
-            },
-            {
-              text: "Done",
+              text: "OK",
               onPress: () => {
-                setFriendName("");
                 setFriendEmail("");
                 onClose();
                 onSuccess?.();
               },
-              style: "cancel",
             },
           ]
         );
       } else {
+        // Fallback: Show the deep link to copy manually
         Alert.alert(
-          "Error",
-          "Failed to send friend request. They may have already received a request from you."
+          "Email Client Not Available",
+          `Copy this link and send it to ${friendEmail}:\n\n${deepLink}`,
+          [
+            {
+              text: "Copy Link",
+              onPress: () => {
+                // Note: Clipboard API would be used here in a real app
+                Alert.alert("Link Ready", "Share this link with your friend");
+              },
+            },
+            { text: "Cancel" },
+          ]
         );
       }
     } catch (error) {
       console.error("Error sending friend request:", error);
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      Alert.alert("Error", "Failed to send friend request. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    if (!loading) {
-      setFriendName("");
-      setFriendEmail("");
-      onClose();
-    }
+    setFriendEmail("");
+    onClose();
   };
 
   return (
@@ -147,10 +154,7 @@ export default function AddFriendModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.overlay}
-      >
+      <View style={styles.overlay}>
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
@@ -159,43 +163,37 @@ export default function AddFriendModal({
         />
 
         <View style={styles.modalContainer}>
+          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>Add Friend</Text>
             <Text style={styles.subtitle}>
-              Send a friend request to connect
+              Send a friend request via email
             </Text>
           </View>
 
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Friend's Name</Text>
-              <TextInput
-                style={styles.input}
-                value={friendName}
-                onChangeText={setFriendName}
-                placeholder="Enter name"
-                placeholderTextColor="#666"
-                autoCapitalize="words"
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Friend's Email</Text>
-              <TextInput
-                style={styles.input}
-                value={friendEmail}
-                onChangeText={setFriendEmail}
-                placeholder="Enter email address"
-                placeholderTextColor="#666"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
+          {/* Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Friend's Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="friend@example.com"
+              placeholderTextColor="#666"
+              value={friendEmail}
+              onChangeText={setFriendEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!loading}
+            />
           </View>
 
+          {/* Info Text */}
+          <Text style={styles.infoText}>
+            Your friend will receive an email with a link to accept your friend
+            request.
+          </Text>
+
+          {/* Buttons */}
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={[styles.button, styles.cancelButton]}
@@ -215,14 +213,14 @@ export default function AddFriendModal({
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#FFF" />
+                <ActivityIndicator color="white" />
               ) : (
                 <Text style={styles.sendButtonText}>Send Request</Text>
               )}
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -242,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.7)",
   },
   modalContainer: {
-    backgroundColor: "#1E1E1E",
+    backgroundColor: "#1e1e1e",
     borderRadius: 16,
     padding: 24,
     width: "85%",
@@ -259,34 +257,37 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#FFF",
+    color: "white",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
     color: "#999",
-    lineHeight: 20,
-  },
-  form: {
-    marginBottom: 24,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFF",
+    color: "#ccc",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: "#2A2A2A",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#FFF",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "#444",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "white",
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 24,
+    lineHeight: 18,
   },
   buttonContainer: {
     flexDirection: "row",
@@ -298,14 +299,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 48,
   },
   cancelButton: {
-    backgroundColor: "#2A2A2A",
+    backgroundColor: "#2a2a2a",
     borderWidth: 1,
     borderColor: "#444",
   },
   cancelButtonText: {
-    color: "#FFF",
+    color: "#999",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -313,7 +315,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#DC2626",
   },
   sendButtonText: {
-    color: "#FFF",
+    color: "white",
     fontSize: 16,
     fontWeight: "600",
   },

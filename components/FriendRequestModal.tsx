@@ -1,9 +1,10 @@
 import { useAuth } from "@/contexts/AuthContext";
 import {
   acceptFriendRequest,
+  getFriendRequestById,
   rejectFriendRequest,
 } from "@/supabase/supabaseClient";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -37,13 +38,36 @@ export default function FriendRequestModal({
   visible,
   onClose,
   requestId,
-  senderName,
+  senderName: propSenderName,
   senderEmail,
   onAccept,
   onDecline,
 }: FriendRequestModalProps) {
   const [loading, setLoading] = useState(false);
+  const [fetchingRequest, setFetchingRequest] = useState(true);
+  const [senderName, setSenderName] = useState(propSenderName || "Someone");
   const { user } = useAuth();
+
+  // Fetch friend request details when modal opens
+  useEffect(() => {
+    if (visible && requestId) {
+      fetchFriendRequest();
+    }
+  }, [visible, requestId]);
+
+  async function fetchFriendRequest() {
+    setFetchingRequest(true);
+    try {
+      const requestData = await getFriendRequestById(requestId);
+      if (requestData?.senderProfile) {
+        setSenderName(requestData.senderProfile.full_name || requestData.senderProfile.email);
+      }
+    } catch (error) {
+      console.error("Error fetching friend request:", error);
+    } finally {
+      setFetchingRequest(false);
+    }
+  }
 
   async function handleAccept() {
     if (!user) {
@@ -88,7 +112,7 @@ export default function FriendRequestModal({
 
     setLoading(true);
     try {
-      const success = await rejectFriendRequest(requestId, user.name);
+      const success = await rejectFriendRequest(requestId, user.id);
 
       if (success) {
         Alert.alert("Declined", "Friend request declined", [
@@ -127,41 +151,50 @@ export default function FriendRequestModal({
         />
 
         <View style={styles.modalContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Friend Request</Text>
-            <Text style={styles.message}>
-              <Text style={styles.senderName}>{senderName}</Text> wants to
-              connect with you
-            </Text>
-          </View>
+          {fetchingRequest ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#DC2626" />
+              <Text style={styles.loadingText}>Loading request...</Text>
+            </View>
+          ) : (
+            <>
+              {/* Header */}
+              <View style={styles.header}>
+                <Text style={styles.title}>Friend Request</Text>
+                <Text style={styles.message}>
+                  <Text style={styles.senderName}>{senderName}</Text> wants to
+                  connect with you
+                </Text>
+              </View>
 
-          {/* Buttons */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.declineButton]}
-              onPress={handleDecline}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#999" />
-              ) : (
-                <Text style={styles.declineButtonText}>Decline</Text>
-              )}
-            </TouchableOpacity>
+              {/* Buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.declineButton]}
+                  onPress={handleDecline}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#999" />
+                  ) : (
+                    <Text style={styles.declineButtonText}>Decline</Text>
+                  )}
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.button, styles.acceptButton]}
-              onPress={handleAccept}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.acceptButtonText}>Accept</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  style={[styles.button, styles.acceptButton]}
+                  onPress={handleAccept}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.acceptButtonText}>Accept</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -241,5 +274,15 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
   },
 });

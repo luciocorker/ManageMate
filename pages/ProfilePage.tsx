@@ -1,5 +1,8 @@
+import { getUserProfile } from "@/supabase/supabaseClient";
 import type { Friend } from "@/types/messaging";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -70,25 +73,37 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
-  // ============================================================================
-  // 🔒 PLACEHOLDER: AUTHENTICATION & PROFILE DATA
-  // ============================================================================
-  // TODO: Replace with Supabase Auth integration
-  // When Supabase Auth is implemented:
-  // 1. Fetch profile data from Supabase using authenticated user ID
-  // 2. Query user profiles table: SELECT * FROM profiles WHERE user_id = friend.id
-  // 3. Handle loading states and errors
-  // 4. Implement real-time profile updates
-  // ============================================================================
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Profile data - uses friend properties if available, otherwise placeholder data
-  const email =
-    friend.email ||
-    `${friend.name.toLowerCase().replace(" ", ".")}@example.com`;
-  const phone = friend.phone || "+1 (555) 000-0000";
-  const bio = friend.bio || "No bio available yet.";
-  const joinDate = friend.joinDate || "Joined recently";
-  const profileImage = friend.profileImage; // Will be used when images are implemented
+  // Fetch profile data from Supabase
+  useEffect(() => {
+    async function loadProfile() {
+      setLoading(true);
+      try {
+        const profileData = await getUserProfile(friend.id);
+        setProfile(profileData);
+      } catch (error) {
+        console.error("Error loading profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadProfile();
+  }, [friend.id]);
+
+  // Profile data - uses fetched profile or friend properties as fallback
+  const email = profile?.email || friend.email || "No email available";
+  const phone = profile?.phone_number || friend.phone || "No phone available";
+  const bio = profile?.bio || friend.bio || "No bio available yet.";
+  const joinDate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : friend.joinDate || "Recently";
+  const profileImage = profile?.profile_picture_url || friend.profileImage;
 
   return (
     <View style={styles.container}>
@@ -101,8 +116,15 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Profile Avatar Section */}
-        <View style={styles.profileSection}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#DC2626" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        ) : (
+          <>
+            {/* Profile Avatar Section */}
+            <View style={styles.profileSection}>
           {/* 🔒 PLACEHOLDER: Profile Image */}
           {/* TODO: Replace with actual profile image from Supabase Storage */}
           {/* When implemented: <Image source={{ uri: profileImage }} style={styles.profileImage} /> */}
@@ -181,15 +203,17 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
           </TouchableOpacity>
         </View>
 
-        {/* READ-ONLY NOTICE */}
-        <View style={styles.section}>
-          <View style={styles.noticeCard}>
-            <Text style={styles.noticeText}>
-              👁️ Profile is read-only. You're viewing {friend.name}'s
-              information.
-            </Text>
-          </View>
-        </View>
+            {/* READ-ONLY NOTICE */}
+            <View style={styles.section}>
+              <View style={styles.noticeCard}>
+                <Text style={styles.noticeText}>
+                  👁️ Profile is read-only. You're viewing {friend.name}'s
+                  information.
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -328,5 +352,16 @@ const styles = StyleSheet.create({
     color: "#ccc",
     textAlign: "center",
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
   },
 });

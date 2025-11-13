@@ -181,8 +181,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
   const scrollViewRef = useRef<ScrollView>(null);
 
   // ✅ FUNCTIONAL: Real-time messaging room ID
-  // Create a unique room ID for direct messages between two users
-  const roomId = [user?.name, friend.name].sort().join("_");
+  // Create a unique room ID for direct messages between two users using Firebase UIDs
+  const roomId = user ? [user.id, friend.id].sort().join("_") : "";
 
   // ============================================================================
   // ✅ FUNCTIONAL: Mark conversation as read when user opens chat
@@ -206,18 +206,18 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
 
     // Listen for new messages (add to existing global listener)
     const handleChatMessage = (message: any) => {
-      // Construct roomId from message
+      // Construct roomId from message using Firebase UIDs
       const messageRoomId = message.channel_id
         ? null
-        : [message.sender_name, message.receiver_name].sort().join("_");
+        : [message.sender_id, message.receiver_id].sort().join("_");
 
       // Only add messages for this conversation
       if (messageRoomId === roomId) {
         const newMessage: Message = {
           id: message.id,
-          text: message.text,
-          sender: message.sender_name === user.name ? "me" : "them",
-          senderName: message.sender_name,
+          text: message.text || message.content,
+          sender: message.sender_id === user.id ? "me" : "them",
+          senderName: message.sender_id === user.id ? user.name : friend.name,
           timestamp: new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -252,14 +252,15 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
 
     setLoading(true);
     try {
-      const messagesData = await getDirectMessages(user.name, friend.name);
+      // Get messages using Firebase UIDs
+      const messagesData = await getDirectMessages(user.id, friend.id);
 
       // Transform Supabase messages to display format
       const displayMessages: Message[] = messagesData.map((msg) => ({
         id: msg.id,
         text: msg.content,
         sender: msg.sender_id === user.id ? "me" : "them",
-        senderName: msg.sender_id,
+        senderName: msg.sender_id === user.id ? user.name : friend.name,
         timestamp: new Date(msg.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -284,10 +285,10 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
     if (inputText.trim() && !sending && user) {
       setSending(true);
       try {
-        // Save message to Supabase
+        // Save message to Supabase using Firebase UIDs
         const savedMessage = await sendMessageToFriend(
-          user.name,
-          friend.name,
+          user.id,
+          friend.id,
           inputText.trim()
         );
 
@@ -297,7 +298,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           realtime.sendMessage(roomId, {
             id: savedMessage.id,
             text: savedMessage.content,
-            sender_name: savedMessage.sender_id,
+            sender_id: savedMessage.sender_id,
+            receiver_id: savedMessage.receiver_id,
             created_at: savedMessage.created_at,
             roomId: roomId,
           });
@@ -307,7 +309,7 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
             id: savedMessage.id,
             text: savedMessage.content,
             sender: "me",
-            senderName: savedMessage.sender_id,
+            senderName: user.name,
             timestamp: new Date(savedMessage.created_at).toLocaleTimeString(
               [],
               {

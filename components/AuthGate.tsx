@@ -58,17 +58,17 @@ export default function AuthGate({ children }: AuthGateProps) {
     const { path, queryParams } = Linking.parse(url);
 
     if (path === "friend-request") {
-      const { requestId, senderEmail } = queryParams as any;
+      const { requestId, senderEmail, senderName } = queryParams as any;
 
-      if (!requestId || !senderEmail) {
-        console.error("Invalid friend request link - missing parameters");
+      if (!requestId) {
+        console.error("Invalid friend request link - missing requestId");
         return;
       }
 
       // Store pending friend request
       setPendingFriendRequest({
         requestId,
-        senderEmail,
+        senderEmail: senderEmail || "Unknown",
       });
 
       // If user is authenticated, show modal immediately
@@ -91,14 +91,9 @@ export default function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  // If user is not authenticated or email not verified, redirect to landing page
+  // If user is not authenticated or email not verified, show nothing (let index.tsx handle redirect)
   if (!isAuthenticated) {
-    router.replace("/(auth)/landing" as any);
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#ff6b6b" />
-      </View>
-    );
+    return null;
   }
 
   // If user is authenticated and email verified, show the app
