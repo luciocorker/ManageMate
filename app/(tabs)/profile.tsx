@@ -114,17 +114,80 @@ export default function ProfileScreen() {
     return () => unsubscribe();
   }, []);
 
+  // Reload profile when screen is focused
+  useEffect(() => {
+    const loadData = () => {
+      if (user) {
+        loadUserProfile(user.uid);
+      }
+    };
+
+    // Load immediately
+    loadData();
+
+    // Set up interval to refresh every 2 seconds when modal is closed
+    const interval = setInterval(() => {
+      if (!showEditModal && user) {
+        loadUserProfile(user.uid);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [user, showEditModal]);
+
   const loadUserProfile = async (userId: string) => {
     try {
+      console.log("Loading profile for user:", userId);
       const { data, error } = await supabase
         .from("users")
         .select("*")
         .eq("firebase_uid", userId)
         .single();
 
-      if (error) throw error;
+      // If user doesn't exist, create them
+      if (error && error.code === "PGRST116") {
+        console.log("User not found in database, creating...");
+        const currentUser = auth.currentUser;
+
+        const { data: newUser, error: insertError } = await supabase
+          .from("users")
+          .insert([
+            {
+              firebase_uid: userId,
+              email: currentUser?.email || "",
+              full_name: currentUser?.displayName || "",
+            },
+          ])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Error creating user:", insertError);
+          return;
+        }
+
+        console.log("User created:", newUser);
+
+        // Set empty profile for new user
+        setProfile({
+          full_name: newUser.full_name || "",
+          phone_number: "",
+          location: "",
+          linkedin_url: "",
+          github_url: "",
+          bio: "",
+          profile_picture_url: "",
+        });
+        return;
+      }
+
+      if (error) {
+        console.error("Error loading profile:", error);
+        return;
+      }
 
       if (data) {
+        console.log("Profile data loaded:", data);
         setProfile({
           full_name: data.full_name || "",
           phone_number: data.phone_number || "",
@@ -134,6 +197,7 @@ export default function ProfileScreen() {
           bio: data.bio || "",
           profile_picture_url: data.profile_picture_url || "",
         });
+        console.log("Profile state updated");
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -182,9 +246,16 @@ export default function ProfileScreen() {
         onClose={() => setShowEditModal(false)}
         onSave={() => {
           // Reload profile after save
+          console.log("Profile saved, reloading data...");
           if (user) {
             loadUserProfile(user.uid);
           }
+          // Force a small delay to ensure database has updated
+          setTimeout(() => {
+            if (user) {
+              loadUserProfile(user.uid);
+            }
+          }, 500);
         }}
       />
 

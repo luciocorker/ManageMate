@@ -1,6 +1,8 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { auth } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import {
@@ -99,7 +101,7 @@ export default function EditProfileModal({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -116,42 +118,116 @@ export default function EditProfileModal({
 
   const uploadImage = async (uri: string) => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+      Alert.alert("Error", "No user logged in");
+      return;
+    }
 
     setUploading(true);
 
     try {
-      // For React Native, we need to use ArrayBuffer
-      const response = await fetch(uri);
-      const arrayBuffer = await response.arrayBuffer();
-      const fileData = new Uint8Array(arrayBuffer);
+      console.log("=== Starting Image Upload ===");
+      console.log("URI:", uri);
+      console.log("User ID:", user.uid);
+
+      // Read the file as base64 using legacy FileSystem
+      console.log("Reading file as base64...");
+      let base64: string;
+
+      try {
+        base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: "base64",
+        });
+        console.log("✓ File read successfully, length:", base64.length);
+      } catch (readError: any) {
+        console.error("✗ Error reading file:", readError);
+        throw new Error(`Failed to read image file: ${readError.message}`);
+      }
+
+      // Validate base64
+      if (!base64 || base64.length === 0) {
+        throw new Error("Image file is empty");
+      }
 
       // Create file name
-      const fileExt = uri.split(".").pop() || "jpg";
-      const fileName = `${user.uid}/${Date.now()}.${fileExt}`;
+      const fileExt = uri.split(".").pop()?.toLowerCase() || "jpg";
+      const timestamp = Date.now();
+      const fileName = `${user.uid}/${timestamp}.${fileExt}`;
+      const contentType = `image/${fileExt === "jpg" ? "jpeg" : fileExt}`;
+
+      console.log("File name:", fileName);
+      console.log("Content type:", contentType);
+
+      // Convert base64 to ArrayBuffer
+      console.log("Converting to ArrayBuffer...");
+      let arrayBuffer: ArrayBuffer;
+
+      try {
+        arrayBuffer = decode(base64);
+        console.log(
+          "✓ Converted to ArrayBuffer, size:",
+          arrayBuffer.byteLength
+        );
+      } catch (decodeError: any) {
+        console.error("✗ Error decoding base64:", decodeError);
+        throw new Error(`Failed to process image: ${decodeError.message}`);
+      }
 
       // Upload to Supabase Storage
+      console.log("Uploading to Supabase Storage...");
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("profile-pictures")
-        .upload(fileName, fileData, {
-          contentType: `image/${fileExt}`,
+        .upload(fileName, arrayBuffer, {
+          contentType: contentType,
           upsert: true,
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("✗ Supabase upload error:", uploadError);
+
+        // Check for specific errors
+        if (
+          uploadError.message?.includes("Bucket not found") ||
+          uploadError.message?.includes("bucket")
+        ) {
+          throw new Error(
+            "SETUP REQUIRED:\n\n" +
+              "1. Go to Supabase Dashboard\n" +
+              "2. Click Storage\n" +
+              "3. Create new bucket: 'profile-pictures'\n" +
+              "4. Make it PUBLIC\n" +
+              "5. Try uploading again\n\n" +
+              "See CREATE_STORAGE_BUCKET.md for details"
+          );
+        }
+
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      console.log("✓ Upload successful:", uploadData);
 
       // Get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
 
-      // Update profile with new image URL
+      console.log("✓ Public URL generated:", publicUrl);
+
+      // Update profile state with new image URL
       setProfile({ ...profile, profile_picture_url: publicUrl });
 
-      Alert.alert("Success", "Profile picture uploaded successfully!");
+      console.log("=== Upload Complete ===");
+      Alert.alert("Success!", "Profile picture uploaded successfully");
     } catch (error: any) {
-      console.error("Error uploading image:", error);
-      Alert.alert("Error", error.message || "Failed to upload image");
+      console.error("=== Upload Failed ===");
+      console.error("Error:", error);
+      console.error("Error message:", error.message);
+
+      // Show user-friendly error message
+      Alert.alert(
+        "Upload Failed",
+        error.message || "Failed to upload profile picture. Please try again."
+      );
     } finally {
       setUploading(false);
     }

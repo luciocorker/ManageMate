@@ -89,13 +89,14 @@ export default function SignUpScreen() {
           firebase_uid: user.uid,
           email: user.email,
           full_name: name,
-          email_verified: false,
-          created_at: new Date().toISOString(),
         },
       ]);
 
       if (supabaseError) {
-        console.warn("Supabase storage error:", supabaseError);
+        console.error("Supabase storage error:", supabaseError);
+        // Don't fail signup if Supabase insert fails
+      } else {
+        console.log("User successfully saved to Supabase");
       }
 
       setLoading(false);
