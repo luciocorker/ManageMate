@@ -1,10 +1,10 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { sendFriendRequestEmail } from "@/services/emailService";
 import { sendFriendRequest } from "@/supabase/supabaseClient";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   StyleSheet,
   Text,
@@ -74,38 +74,26 @@ export default function AddFriendModal({
       });
 
       if (!friendRequest) {
-        Alert.alert("Error", "Failed to create friend request");
+        Alert.alert("Error", "Failed to create friend request. The user might not exist.");
         setLoading(false);
         return;
       }
 
-      // Generate deep link for the friend request
-      const deepLink = `managemate://friend-request?requestId=${friendRequest.id}&senderEmail=${encodeURIComponent(currentUserEmail)}&senderName=${encodeURIComponent(currentUserName)}`;
+      // Send email using EmailJS (no backend needed!)
+      console.log("📧 Sending friend request email via EmailJS...");
 
-      // Create email body with the invitation
-      const emailSubject = `${currentUserName} wants to connect on ManageMate`;
-      const emailBody = `Hi there!
+      const emailResult = await sendFriendRequestEmail(
+        friendEmail.trim(),
+        currentUserName,
+        currentUserEmail,
+        friendRequest.id
+      );
 
-${currentUserName} (${currentUserEmail}) has invited you to connect on ManageMate.
-
-Click the link below to accept the friend request:
-${deepLink}
-
-If you don't have ManageMate installed yet, download it first and then click the link.
-
-Best regards,
-The ManageMate Team`;
-
-      // Open email client with pre-filled content
-      const mailtoUrl = `mailto:${friendEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
-
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-        
+      if (emailResult.success) {
+        console.log("✅ Email sent successfully!");
         Alert.alert(
           "Friend Request Sent!",
-          `An email invitation has been prepared for ${friendEmail}. Send the email to complete the friend request.`,
+          `An email invitation has been sent to ${friendEmail}. They will receive a link to accept your friend request.`,
           [
             {
               text: "OK",
@@ -118,19 +106,20 @@ The ManageMate Team`;
           ]
         );
       } else {
-        // Fallback: Show the deep link to copy manually
+        // Email failed, but friend request was created
+        console.error("Email sending failed:", emailResult.error);
         Alert.alert(
-          "Email Client Not Available",
-          `Copy this link and send it to ${friendEmail}:\n\n${deepLink}`,
+          "Friend Request Created",
+          `Friend request created, but email failed to send. Error: ${emailResult.error}\n\nPlease share the friend request link manually.`,
           [
             {
-              text: "Copy Link",
+              text: "OK",
               onPress: () => {
-                // Note: Clipboard API would be used here in a real app
-                Alert.alert("Link Ready", "Share this link with your friend");
+                setFriendEmail("");
+                onClose();
+                onSuccess?.();
               },
             },
-            { text: "Cancel" },
           ]
         );
       }

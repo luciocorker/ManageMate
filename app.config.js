@@ -19,6 +19,11 @@ module.exports = {
       associatedDomains: ["applinks:managemate-32f1d.firebaseapp.com"],
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        // WebView compatibility
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: false,
+          NSAllowsLocalNetworking: true,
+        },
       },
     },
     android: {
@@ -42,12 +47,20 @@ module.exports = {
           category: ["BROWSABLE", "DEFAULT"],
         },
       ],
+      // WebView compatibility
+      usesCleartextTraffic: false,
+      permissions: [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+      ],
     },
     web: {
       bundler: "metro",
       output: "static",
       favicon: "./assets/images/favicon.png",
     },
+    // WebView compatibility settings
+    jsEngine: "hermes",
     plugins: [
       "expo-router",
       "expo-secure-store",
