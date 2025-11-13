@@ -1,7 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
 import { Project } from '@/types/project';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -13,28 +12,28 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }: ProjectCardProps) {
-  const iconColor = useThemeColor({}, 'icon');
+  const iconColor = '#999';
   
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Planning': return '#6b7280';
-      case 'In Progress': return '#3b82f6';
-      case 'Review': return '#f59e0b';
-      case 'Testing': return '#8b5cf6';
-      case 'Completed': return '#10b981';
-      case 'Paused': return '#ef4444';
-      case 'Archived': return '#6b7280';
-      default: return '#6b7280';
+      case 'Planning': return '#2a2a2a';
+      case 'In Progress': return '#DC2626';
+      case 'Review': return '#DC2626';
+      case 'Testing': return '#DC2626';
+      case 'Completed': return '#2a2a2a';
+      case 'Paused': return '#2a2a2a';
+      case 'Archived': return '#2a2a2a';
+      default: return '#2a2a2a';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'Critical': return '#ef4444';
-      case 'High': return '#f97316';
-      case 'Medium': return '#f59e0b';
-      case 'Low': return '#10b981';
-      default: return '#6b7280';
+      case 'Critical': return '#DC2626';
+      case 'High': return '#DC2626';
+      case 'Medium': return '#2a2a2a';
+      case 'Low': return '#2a2a2a';
+      default: return '#2a2a2a';
     }
   };
 
@@ -56,13 +55,13 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <ThemedView 
         style={styles.card}
-        lightColor="#f9fafb"
-        darkColor="#1f2937"
+        lightColor="#1e1e1e"
+        darkColor="#1e1e1e"
       >
         {/* Header Row */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={[styles.colorDot, { backgroundColor: project.color }]} />
+            <View style={[styles.colorDot, { backgroundColor: '#DC2626' }]} />
             <ThemedText style={styles.projectName} numberOfLines={1}>
               {project.name}
             </ThemedText>
@@ -72,7 +71,7 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
               <IconSymbol 
                 name={project.isFavorite ? 'star.fill' : 'star'} 
                 size={20} 
-                color={project.isFavorite ? '#f59e0b' : iconColor} 
+                color={project.isFavorite ? '#DC2626' : iconColor} 
               />
             </TouchableOpacity>
             <TouchableOpacity onPress={onMenuPress} style={styles.iconButton}>
@@ -104,7 +103,7 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
             <View 
               style={[
                 styles.progressFill, 
-                { width: `${project.progress}%`, backgroundColor: project.color }
+                { width: `${project.progress}%`, backgroundColor: '#DC2626' }
               ]} 
             />
           </View>
@@ -220,7 +219,7 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 8,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#2a2a2a',
     borderRadius: 4,
     overflow: 'hidden',
   },
