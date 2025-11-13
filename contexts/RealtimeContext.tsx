@@ -46,7 +46,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const messageCallbacksRef = React.useRef<((message: any) => void)[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+    // For now, always connect to Supabase Realtime (even without auth)
+    // When Supabase Auth is implemented, add: if (!user) return;
+
+    console.log("🔌 Connecting to Supabase Realtime...");
 
     // Create a channel for real-time message updates
     const channel = supabase
@@ -59,7 +62,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           table: "messages",
         },
         (payload) => {
-          console.log("New message received:", payload.new);
+          console.log("📨 New message received:", payload.new);
 
           // Notify all registered callbacks using ref (always gets current callbacks)
           messageCallbacksRef.current.forEach((callback) =>
@@ -69,13 +72,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          console.log("Realtime subscribed successfully");
+          console.log("✅ Realtime subscribed successfully");
           setIsConnected(true);
         } else if (status === "CLOSED") {
-          console.log("Realtime connection closed");
+          console.log("🔴 Realtime connection closed");
           setIsConnected(false);
         } else if (status === "CHANNEL_ERROR") {
-          console.error("Realtime channel error");
+          console.error("❌ Realtime channel error");
           setIsConnected(false);
         }
       });
@@ -84,11 +87,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     // Cleanup on unmount
     return () => {
-      console.log("Unsubscribing from realtime");
+      console.log("🔌 Unsubscribing from realtime");
       channel.unsubscribe();
       setIsConnected(false);
     };
-  }, [user]);
+  }, []); // Remove user dependency for now
 
   const joinChannel = (channelId: string) => {
     // With Supabase Realtime, we don't need to explicitly join channels

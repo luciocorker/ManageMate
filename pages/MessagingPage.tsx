@@ -133,7 +133,7 @@ const OnlineIndicator = () => (
 );
 
 export default function MessagingPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // ============================================================================
   // ✅ FUNCTIONAL: Unread message tracking
@@ -164,23 +164,30 @@ export default function MessagingPage() {
     };
   }, []);
 
-  // Load data from Supabase when user is available
+  // Load data from Supabase when component mounts
   useEffect(() => {
-    if (user) {
+    // Don't load if auth is still loading
+    if (!authLoading) {
       loadData();
     }
-  }, [user]);
+  }, [authLoading]);
 
   async function loadData() {
-    if (!user) return;
+    // Get current user or use placeholder
+    const currentUser = user || { name: "TestUser", email: "test@example.com" };
 
     setLoading(true);
+    console.log("📊 Loading messenger data for user:", currentUser.name);
+
     try {
       // Load channels and friends from Supabase
       const [channelsData, friendsData] = await Promise.all([
         getChannels(),
-        getFriends(user.name),
+        getFriends(currentUser.name),
       ]);
+
+      console.log("📊 Loaded channels:", channelsData.length);
+      console.log("📊 Loaded friends:", friendsData.length);
 
       // Transform Supabase channels to display format with member counts
       const displayChannels: Channel[] = await Promise.all(
@@ -199,7 +206,10 @@ export default function MessagingPage() {
       const displayFriends: Friend[] = await Promise.all(
         friendsData.map(async (f) => {
           // Get last message with this friend
-          const messages = await getDirectMessages(user.name, f.friend_name);
+          const messages = await getDirectMessages(
+            currentUser.name,
+            f.friend_name
+          );
           const lastMessage =
             messages.length > 0 ? messages[messages.length - 1] : null;
 
@@ -215,8 +225,9 @@ export default function MessagingPage() {
 
       setChannels(displayChannels);
       setFriends(displayFriends);
+      console.log("✅ Messenger data loaded successfully");
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("❌ Error loading messenger data:", error);
     } finally {
       setLoading(false);
     }
@@ -226,7 +237,7 @@ export default function MessagingPage() {
     channelName: string,
     selectedFriends: Friend[]
   ) => {
-    if (!user) return;
+    const currentUser = user || { name: "TestUser", email: "test@example.com" };
 
     try {
       // Create channel in Supabase
@@ -240,8 +251,8 @@ export default function MessagingPage() {
         // Add selected friends as channel members
         const friendNames = selectedFriends.map((f) => f.name);
         // Also add the current user as a member
-        const allMembers = [user.name, ...friendNames];
-        await addChannelMembers(newChannel.id, allMembers, user.name);
+        const allMembers = [currentUser.name, ...friendNames];
+        await addChannelMembers(newChannel.id, allMembers, currentUser.name);
 
         // Add to local state
         const displayChannel: Channel = {
@@ -348,7 +359,11 @@ export default function MessagingPage() {
               friends.map((friend) => {
                 // ✅ FUNCTIONAL: Get unread count for this friend
                 // Room ID matches the format used in ChatScreen
-                const roomId = [user?.name, friend.name].sort().join("_");
+                const currentUser = user || {
+                  name: "TestUser",
+                  email: "test@example.com",
+                };
+                const roomId = [currentUser.name, friend.name].sort().join("_");
                 const unreadCount = getUnreadCount(roomId);
 
                 return (
@@ -461,8 +476,8 @@ export default function MessagingPage() {
       <AddFriendModal
         visible={showAddFriendModal}
         onClose={() => setShowAddFriendModal(false)}
-        currentUserName={user?.name || ""}
-        currentUserEmail={user?.email || ""}
+        currentUserName={user?.name || "TestUser"}
+        currentUserEmail={user?.email || "test@example.com"}
         onSuccess={loadData}
       />
     </View>
