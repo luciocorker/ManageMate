@@ -1,8 +1,8 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { auth } from "@/lib/firebase";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import { sendPasswordResetEmail } from "firebase/auth";
+import { router, useLocalSearchParams } from "expo-router";
+import { confirmPasswordReset } from "firebase/auth";
 import { useState } from "react";
 import {
   Alert,
@@ -16,49 +16,54 @@ import {
   View,
 } from "react-native";
 
-export default function ForgotPasswordScreen() {
-  const [email, setEmail] = useState("");
+export default function ResetPasswordScreen() {
+  const { oobCode } = useLocalSearchParams<{ oobCode: string }>();
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleResetPassword = async () => {
-    if (!email) {
-      Alert.alert("Error", "Please enter your email address");
+    if (!newPassword || !confirmPassword) {
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters");
+      return;
+    }
+
+    if (!oobCode) {
+      Alert.alert("Error", "Invalid reset link");
       return;
     }
 
     setLoading(true);
 
     try {
-      // Configure action code settings for mobile deep linking
-      const actionCodeSettings = {
-        url: "https://managemate-32f1d.firebaseapp.com/?email=" + email,
-        iOS: {
-          bundleId: "com.managemate.app",
-        },
-        android: {
-          packageName: "com.managemate.app",
-          installApp: true,
-          minimumVersion: "1",
-        },
-        handleCodeInApp: true,
-      };
-
-      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+      await confirmPasswordReset(auth, oobCode, newPassword);
       setLoading(false);
 
       Alert.alert(
         "Success!",
-        "Password reset email sent! Please check your inbox and follow the instructions to reset your password.",
-        [{ text: "OK", onPress: () => router.back() }]
+        "Your password has been reset successfully. You can now sign in with your new password.",
+        [{ text: "OK", onPress: () => router.replace("/(auth)/signin") }]
       );
     } catch (error: any) {
       setLoading(false);
       let errorMessage = "An error occurred";
 
-      if (error.code === "auth/invalid-email") {
-        errorMessage = "Invalid email address";
-      } else if (error.code === "auth/user-not-found") {
-        errorMessage = "No account found with this email";
+      if (error.code === "auth/expired-action-code") {
+        errorMessage = "This reset link has expired. Please request a new one.";
+      } else if (error.code === "auth/invalid-action-code") {
+        errorMessage = "This reset link is invalid or has already been used.";
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -77,40 +82,66 @@ export default function ForgotPasswordScreen() {
         showsVerticalScrollIndicator={false}
       >
         <LinearGradient colors={["#ff6b6b", "#ff8787"]} style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <IconSymbol name="chevron.left" size={24} color="#fff" />
-          </TouchableOpacity>
-
           <View style={styles.logoContainer}>
             <View style={styles.logo}>
               <IconSymbol name="lock.fill" size={40} color="#fff" />
             </View>
           </View>
 
-          <Text style={styles.headerTitle}>Forgot Password?</Text>
+          <Text style={styles.headerTitle}>Reset Password</Text>
           <Text style={styles.headerSubtitle}>
-            Enter your email and we'll send you a link to reset your password
+            Enter your new password below
           </Text>
         </LinearGradient>
 
         <View style={styles.formContainer}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>New Password</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="envelope.fill" size={20} color="#ff6b6b" />
+              <IconSymbol name="lock.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholderTextColor="#a0aec0"
               />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <IconSymbol
+                  name={showPassword ? "eye.slash.fill" : "eye.fill"}
+                  size={20}
+                  color="#ff6b6b"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.inputContainer}>
+              <IconSymbol name="lock.fill" size={20} color="#ff6b6b" />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor="#a0aec0"
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <IconSymbol
+                  name={showConfirmPassword ? "eye.slash.fill" : "eye.fill"}
+                  size={20}
+                  color="#ff6b6b"
+                />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -120,13 +151,13 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             <Text style={styles.resetButtonText}>
-              {loading ? "Sending..." : "Send Reset Link"}
+              {loading ? "Resetting..." : "Reset Password"}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Remember your password? </Text>
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity onPress={() => router.replace("/(auth)/signin")}>
               <Text style={styles.footerLink}>Sign In</Text>
             </TouchableOpacity>
           </View>
@@ -149,17 +180,6 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     paddingHorizontal: 20,
     alignItems: "center",
-  },
-  backButton: {
-    position: "absolute",
-    top: 60,
-    left: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   logoContainer: {
     marginBottom: 24,

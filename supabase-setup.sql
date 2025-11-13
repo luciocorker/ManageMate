@@ -7,6 +7,12 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL,
   full_name TEXT,
   email_verified BOOLEAN DEFAULT FALSE,
+  profile_picture_url TEXT,
+  phone_number TEXT,
+  location TEXT,
+  linkedin_url TEXT,
+  github_url TEXT,
+  bio TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -49,3 +55,33 @@ CREATE TRIGGER update_users_updated_at
   BEFORE UPDATE ON users
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+
+-- Create storage bucket for profile pictures
+-- Run this in Supabase Dashboard > Storage or via SQL
+
+-- Note: Storage buckets are typically created via the Supabase Dashboard
+-- Go to Storage > Create a new bucket named "profile-pictures"
+-- Set it to public if you want profile pictures to be publicly accessible
+
+-- After creating the bucket, set up storage policies:
+
+-- Policy to allow users to upload their own profile pictures
+-- CREATE POLICY "Users can upload own profile picture"
+-- ON storage.objects FOR INSERT
+-- WITH CHECK (bucket_id = 'profile-pictures' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Policy to allow users to update their own profile pictures
+-- CREATE POLICY "Users can update own profile picture"
+-- ON storage.objects FOR UPDATE
+-- USING (bucket_id = 'profile-pictures' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Policy to allow users to delete their own profile pictures
+-- CREATE POLICY "Users can delete own profile picture"
+-- ON storage.objects FOR DELETE
+-- USING (bucket_id = 'profile-pictures' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Policy to allow anyone to view profile pictures (if public)
+-- CREATE POLICY "Anyone can view profile pictures"
+-- ON storage.objects FOR SELECT
+-- USING (bucket_id = 'profile-pictures');

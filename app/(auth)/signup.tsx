@@ -67,8 +67,21 @@ export default function SignUpScreen() {
         displayName: name,
       });
 
-      // Send email verification
-      await sendEmailVerification(user);
+      // Send email verification with action code settings for mobile deep linking
+      const actionCodeSettings = {
+        url: "https://managemate-32f1d.firebaseapp.com/?email=" + user.email,
+        iOS: {
+          bundleId: "com.managemate.app",
+        },
+        android: {
+          packageName: "com.managemate.app",
+          installApp: true,
+          minimumVersion: "1",
+        },
+        handleCodeInApp: true,
+      };
+
+      await sendEmailVerification(user, actionCodeSettings);
 
       // Store user info in Supabase
       const { error: supabaseError } = await supabase.from("users").insert([
