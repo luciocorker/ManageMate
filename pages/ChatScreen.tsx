@@ -2,7 +2,7 @@
 // CHAT SCREEN - Direct Messaging Between Friends
 // ============================================================================
 // ✅ FUNCTIONAL FEATURES:
-// - Real-time messaging via Socket.IO
+// - Real-time messaging via Supabase Realtime
 // - Message persistence via Supabase
 // - Friend list navigation
 // - Profile viewing (read-only)
@@ -16,7 +16,7 @@
 // ============================================================================
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useSocket } from "@/contexts/SocketContext";
+import { useRealtime } from "@/contexts/RealtimeContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import ProfilePage from "@/pages/ProfilePage";
 import {
@@ -160,7 +160,7 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
   // 3. Fetch friend's profile data from profiles table
   // ============================================================================
   const { user } = useAuth();
-  const socket = useSocket();
+  const realtime = useRealtime();
 
   // ============================================================================
   // ✅ FUNCTIONAL: Unread message tracking
@@ -197,23 +197,28 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
     loadMessages();
   }, [friend.name]);
 
-  // ✅ FUNCTIONAL: Setup Socket.IO listeners for real-time messages
+  // ✅ FUNCTIONAL: Setup Supabase Realtime listeners for real-time messages
   useEffect(() => {
-    if (!socket.isConnected || !user) return;
+    if (!realtime.isConnected || !user) return;
 
     // Join the direct message room
-    socket.joinChannel(roomId);
+    realtime.joinChannel(roomId);
 
-    // Listen for new messages
-    socket.onNewMessage((message: any) => {
+    // Listen for new messages (add to existing global listener)
+    const handleChatMessage = (message: any) => {
+      // Construct roomId from message
+      const messageRoomId = message.channel_id
+        ? null
+        : [message.sender_name, message.receiver_name].sort().join("_");
+
       // Only add messages for this conversation
-      if (message.roomId === roomId) {
+      if (messageRoomId === roomId) {
         const newMessage: Message = {
           id: message.id,
           text: message.text,
-          sender: message.senderName === user.name ? "me" : "them",
-          senderName: message.senderName,
-          timestamp: new Date(message.createdAt).toLocaleTimeString([], {
+          sender: message.sender_name === user.name ? "me" : "them",
+          senderName: message.sender_name,
+          timestamp: new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           }),
@@ -232,14 +237,15 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
       }
-    });
-
-    // Cleanup on unmount
-    return () => {
-      socket.leaveChannel(roomId);
-      socket.offNewMessage();
     };
-  }, [socket.isConnected, user, friend.name, roomId]);
+
+    realtime.onNewMessage(handleChatMessage);
+
+    // Cleanup on unmount - only leave the room, keep global listener
+    return () => {
+      realtime.leaveChannel(roomId);
+    };
+  }, [realtime.isConnected, user, friend.name, roomId]);
 
   async function loadMessages() {
     if (!user) return;
@@ -286,16 +292,17 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
         );
 
         if (savedMessage) {
-          // Send message via Socket.IO for real-time delivery
-          socket.sendMessage(roomId, {
+          // Message is automatically broadcast via Supabase Realtime
+          // No need to manually emit - the INSERT trigger handles it
+          realtime.sendMessage(roomId, {
             id: savedMessage.id,
             text: savedMessage.text,
-            senderName: savedMessage.sender_name,
-            createdAt: savedMessage.created_at,
+            sender_name: savedMessage.sender_name,
+            created_at: savedMessage.created_at,
             roomId: roomId,
           });
 
-          // Add message to local state (will also be received via socket)
+          // Add message to local state (will also be received via Supabase Realtime)
           const newMessage: Message = {
             id: savedMessage.id,
             text: savedMessage.text,

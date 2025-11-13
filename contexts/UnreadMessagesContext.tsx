@@ -7,7 +7,7 @@ import React, {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
-import { useSocket } from "./SocketContext";
+import { useRealtime } from "./RealtimeContext";
 
 // ============================================================================
 // UNREAD MESSAGES CONTEXT - Notification & Badge System
@@ -82,7 +82,7 @@ const UNREAD_STORAGE_KEY = "@managemate_unread_counts";
 
 export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const socket = useSocket();
+  const realtime = useRealtime();
   const [unreadCounts, setUnreadCounts] = useState<Record<string, UnreadCount>>(
     {}
   );
@@ -112,40 +112,38 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
   }, [unreadCounts, user]);
 
   // ============================================================================
-  // ✅ FUNCTIONAL: Listen for incoming messages via Socket.IO
+  // ✅ FUNCTIONAL: Listen for incoming messages via Supabase Realtime
   // This is the global listener that increments unread counts when messages arrive
+  // NOTE: We don't remove this listener to avoid conflicts with chat screens
   // ============================================================================
   useEffect(() => {
-    if (!socket.isConnected || !user) return;
+    if (!realtime.isConnected || !user) return;
 
-    // Listen for all incoming messages
-    socket.onNewMessage((message: any) => {
+    const handleNewMessage = (message: any) => {
       // Don't increment for messages sent by current user
-      if (message.senderName === user.name) return;
+      if (message.sender_name === user.name) return;
 
       // Determine conversation ID based on message type
       let conversationId: string;
 
-      if (message.channelId) {
+      if (message.channel_id) {
         // Channel message
-        conversationId = message.channelId;
-      } else if (message.roomId) {
-        // Direct message - roomId is already formatted as sorted usernames
-        conversationId = message.roomId;
+        conversationId = message.channel_id;
       } else {
-        // Fallback: construct room ID from sender and receiver
-        conversationId = [user.name, message.senderName].sort().join("_");
+        // Direct message - construct room ID from sender and receiver
+        conversationId = [user.name, message.sender_name].sort().join("_");
       }
 
       // Increment unread count (this will also show notification if not on messenger page)
-      incrementUnread(conversationId, message.text, message.senderName);
-    });
-
-    // Cleanup listener on unmount
-    return () => {
-      socket.offNewMessage();
+      incrementUnread(conversationId, message.text, message.sender_name);
     };
-  }, [socket.isConnected, user]);
+
+    // Listen for all incoming messages
+    realtime.onNewMessage(handleNewMessage);
+
+    // NOTE: We don't cleanup this global listener to avoid conflicts
+    // The listener will be replaced when realtime reconnects
+  }, [realtime.isConnected, user]);
 
   async function loadUnreadCounts() {
     try {

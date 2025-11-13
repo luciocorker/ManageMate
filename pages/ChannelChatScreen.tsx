@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { useSocket } from "@/contexts/SocketContext";
+import { useRealtime } from "@/contexts/RealtimeContext";
 import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import {
   getChannelMessages,
@@ -76,7 +76,7 @@ export default function ChannelChatScreen({
   onInfoPress,
 }: ChannelChatScreenProps) {
   const { user } = useAuth();
-  const socket = useSocket();
+  const realtime = useRealtime();
 
   // ============================================================================
   // ✅ FUNCTIONAL: Unread message tracking
@@ -102,22 +102,23 @@ export default function ChannelChatScreen({
     markAsRead(channel.id);
   }, [channel.id]);
 
-  // Setup Socket.IO listeners for real-time channel messages
+  // Setup Supabase Realtime listeners for real-time channel messages
   useEffect(() => {
-    if (!socket.isConnected || !user) return;
+    if (!realtime.isConnected || !user) return;
 
     // Join the channel room
-    socket.joinChannel(channel.id);
+    realtime.joinChannel(channel.id);
 
-    // Listen for new messages in this channel
-    socket.onNewMessage((message: any) => {
+    // Listen for new messages in this channel (add to existing global listener)
+    const handleChannelMessage = (message: any) => {
       // Only add messages for this channel
-      if (message.channelId === channel.id) {
+      if (message.channel_id === channel.id) {
         const newMessage: Message = {
           id: message.id,
           text: message.text,
-          sender: message.senderName === user.name ? "You" : message.senderName,
-          timestamp: new Date(message.createdAt).toLocaleTimeString([], {
+          sender:
+            message.sender_name === user.name ? "You" : message.sender_name,
+          timestamp: new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           }),
@@ -131,14 +132,15 @@ export default function ChannelChatScreen({
         // ============================================================================
         markAsRead(channel.id);
       }
-    });
-
-    // Cleanup on unmount
-    return () => {
-      socket.leaveChannel(channel.id);
-      socket.offNewMessage();
     };
-  }, [socket.isConnected, user, channel.id]);
+
+    realtime.onNewMessage(handleChannelMessage);
+
+    // Cleanup on unmount - only leave the channel, keep global listener
+    return () => {
+      realtime.leaveChannel(channel.id);
+    };
+  }, [realtime.isConnected, user, channel.id]);
 
   async function loadMessages() {
     if (!user) return;
@@ -178,16 +180,17 @@ export default function ChannelChatScreen({
         );
 
         if (savedMessage) {
-          // Send message via Socket.IO for real-time delivery
-          socket.sendMessage(channel.id, {
+          // Message is automatically broadcast via Supabase Realtime
+          // No need to manually emit - the INSERT trigger handles it
+          realtime.sendMessage(channel.id, {
             id: savedMessage.id,
             text: savedMessage.text,
-            senderName: savedMessage.sender_name,
-            createdAt: savedMessage.created_at,
-            channelId: channel.id,
+            sender_name: savedMessage.sender_name,
+            created_at: savedMessage.created_at,
+            channel_id: channel.id,
           });
 
-          // Add message to local state (will also be received via socket)
+          // Add message to local state (will also be received via Supabase Realtime)
           const newMessage: Message = {
             id: savedMessage.id,
             text: savedMessage.text,

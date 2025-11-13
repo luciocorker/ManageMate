@@ -1,6 +1,6 @@
 import MessageNotificationToast from "@/components/MessageNotificationToast";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { SocketProvider } from "@/contexts/SocketContext";
+import { RealtimeProvider } from "@/contexts/RealtimeContext";
 import { UnreadMessagesProvider } from "@/contexts/UnreadMessagesContext";
 import {
   DarkTheme,
@@ -22,7 +22,7 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <SocketProvider>
+      <RealtimeProvider>
         <UnreadMessagesProvider>
           <ThemeProvider
             value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
@@ -40,7 +40,7 @@ export default function RootLayout() {
             <StatusBar style="auto" />
           </ThemeProvider>
         </UnreadMessagesProvider>
-      </SocketProvider>
+      </RealtimeProvider>
     </AuthProvider>
   );
 }
