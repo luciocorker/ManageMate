@@ -67,3 +67,17 @@ export interface CreateFriendRequestInput {
   receiver_name: string;
   receiver_email: string;
 }
+
+export interface ChannelMember {
+  id: string;
+  channel_id: string;
+  user_name: string;
+  added_at: string;
+  added_by?: string;
+}
+
+export interface AddChannelMemberInput {
+  channel_id: string;
+  user_name: string;
+  added_by: string;
+}

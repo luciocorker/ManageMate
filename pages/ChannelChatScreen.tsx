@@ -1,3 +1,6 @@
+import { useAuth } from "@/contexts/AuthContext";
+import { useSocket } from "@/contexts/SocketContext";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import {
   getChannelMessages,
   sendMessageToChannel,
@@ -54,9 +57,6 @@ const InfoIcon = () => (
   </Svg>
 );
 
-// Current user (replace with actual auth later)
-const CURRENT_USER = "Lee";
-
 interface Message {
   id: string;
   text: string;
@@ -75,6 +75,15 @@ export default function ChannelChatScreen({
   onBack,
   onInfoPress,
 }: ChannelChatScreenProps) {
+  const { user } = useAuth();
+  const socket = useSocket();
+
+  // ============================================================================
+  // ✅ FUNCTIONAL: Unread message tracking
+  // Mark channel messages as read when user opens this channel
+  // ============================================================================
+  const { markAsRead } = useUnreadMessages();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
@@ -85,7 +94,55 @@ export default function ChannelChatScreen({
     loadMessages();
   }, [channel.id]);
 
+  // ============================================================================
+  // ✅ FUNCTIONAL: Mark channel as read when user opens it
+  // This clears the unread badge for this channel
+  // ============================================================================
+  useEffect(() => {
+    markAsRead(channel.id);
+  }, [channel.id]);
+
+  // Setup Socket.IO listeners for real-time channel messages
+  useEffect(() => {
+    if (!socket.isConnected || !user) return;
+
+    // Join the channel room
+    socket.joinChannel(channel.id);
+
+    // Listen for new messages in this channel
+    socket.onNewMessage((message: any) => {
+      // Only add messages for this channel
+      if (message.channelId === channel.id) {
+        const newMessage: Message = {
+          id: message.id,
+          text: message.text,
+          sender: message.senderName === user.name ? "You" : message.senderName,
+          timestamp: new Date(message.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+
+        setMessages((prev) => [...prev, newMessage]);
+
+        // ============================================================================
+        // ✅ FUNCTIONAL: Mark channel as read when new message arrives
+        // Since the user is viewing this channel, clear the unread badge immediately
+        // ============================================================================
+        markAsRead(channel.id);
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socket.leaveChannel(channel.id);
+      socket.offNewMessage();
+    };
+  }, [socket.isConnected, user, channel.id]);
+
   async function loadMessages() {
+    if (!user) return;
+
     setLoading(true);
     try {
       const supabaseMessages = await getChannelMessages(channel.id);
@@ -94,7 +151,7 @@ export default function ChannelChatScreen({
       const displayMessages: Message[] = supabaseMessages.map((msg) => ({
         id: msg.id,
         text: msg.text,
-        sender: msg.sender_name === CURRENT_USER ? "You" : msg.sender_name,
+        sender: msg.sender_name === user.name ? "You" : msg.sender_name,
         timestamp: new Date(msg.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -110,18 +167,27 @@ export default function ChannelChatScreen({
   }
 
   const handleSend = async () => {
-    if (inputText.trim() && !sending) {
+    if (inputText.trim() && !sending && user) {
       setSending(true);
       try {
         // Save message to Supabase
         const savedMessage = await sendMessageToChannel(
           channel.id,
-          CURRENT_USER,
+          user.name,
           inputText.trim()
         );
 
         if (savedMessage) {
-          // Add message to local state
+          // Send message via Socket.IO for real-time delivery
+          socket.sendMessage(channel.id, {
+            id: savedMessage.id,
+            text: savedMessage.text,
+            senderName: savedMessage.sender_name,
+            createdAt: savedMessage.created_at,
+            channelId: channel.id,
+          });
+
+          // Add message to local state (will also be received via socket)
           const newMessage: Message = {
             id: savedMessage.id,
             text: savedMessage.text,

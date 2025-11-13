@@ -1,5 +1,15 @@
-import type { Channel } from "@/types/messaging";
+import AddMembersModal from "@/components/AddMembersModal";
+import { useAuth } from "@/contexts/AuthContext";
 import {
+  addChannelMembers,
+  deleteChannel,
+  getChannelMembers,
+  getFriends,
+} from "@/supabase/supabaseClient";
+import type { Channel, Friend } from "@/types/messaging";
+import { useEffect, useState } from "react";
+import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -57,10 +67,124 @@ const UsersIcon = () => (
 interface ChannelDetailProps {
   channel: Channel;
   onBack: () => void;
+  onMembersUpdated?: () => void;
+  onChannelDeleted?: () => void;
 }
 
-export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
+export default function ChannelDetail({
+  channel,
+  onBack,
+  onMembersUpdated,
+  onChannelDeleted,
+}: ChannelDetailProps) {
+  const { user } = useAuth();
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [channelMembers, setChannelMembers] = useState<string[]>(
+    channel.memberNames || []
+  );
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
+
+  // Load friends when component mounts
+  useEffect(() => {
+    loadFriends();
+    loadChannelMembers();
+  }, [user]);
+
+  async function loadFriends() {
+    if (!user) return;
+    try {
+      const friendsData = await getFriends(user.name);
+      const displayFriends: Friend[] = friendsData.map((f) => ({
+        id: f.id,
+        name: f.friend_name,
+        message: "",
+        avatar: getAvatarColor(f.friend_name),
+        online: Math.random() > 0.5,
+      }));
+      setFriends(displayFriends);
+    } catch (error) {
+      console.error("Error loading friends:", error);
+    }
+  }
+
+  async function loadChannelMembers() {
+    try {
+      const members = await getChannelMembers(channel.id);
+      setChannelMembers(members);
+    } catch (error) {
+      console.error("Error loading channel members:", error);
+    }
+  }
+
+  async function handleAddMembers(selectedFriends: Friend[]): Promise<boolean> {
+    if (!user) return false;
+
+    try {
+      const friendNames = selectedFriends.map((f) => f.name);
+      const success = await addChannelMembers(
+        channel.id,
+        friendNames,
+        user.name
+      );
+
+      if (success) {
+        // Reload members
+        await loadChannelMembers();
+        // Notify parent to refresh
+        onMembersUpdated?.();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error adding members:", error);
+      return false;
+    }
+  }
+
+  function getAvatarColor(name: string) {
+    const index = name.length % avatarColors.length;
+    return avatarColors[index];
+  }
+
+  function handleDeleteChannel() {
+    // Show confirmation dialog
+    Alert.alert(
+      "Delete Channel",
+      `Are you sure you want to delete "${channel.name}"? This will delete all messages and cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const success = await deleteChannel(channel.id);
+              if (success) {
+                // Notify parent and go back
+                onChannelDeleted?.();
+                onBack();
+              } else {
+                Alert.alert(
+                  "Error",
+                  "Failed to delete channel. Please try again."
+                );
+              }
+            } catch (error) {
+              console.error("Error deleting channel:", error);
+              Alert.alert(
+                "Error",
+                "An error occurred while deleting the channel."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -79,14 +203,24 @@ export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
             <UsersIcon />
           </View>
           <Text style={styles.channelName}>{channel.name}</Text>
-          <Text style={styles.memberCount}>{channel.members} members</Text>
+          <Text style={styles.memberCount}>
+            {channelMembers.length} members
+          </Text>
         </View>
 
         {/* Members List */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Members</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Members</Text>
+            <TouchableOpacity
+              style={styles.addMemberButton}
+              onPress={() => setShowAddMembersModal(true)}
+            >
+              <Text style={styles.addMemberButtonText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.membersList}>
-            {channel.memberNames?.map((memberName, index) => (
+            {channelMembers.map((memberName, index) => (
               <View key={index} style={styles.memberItem}>
                 <View
                   style={[
@@ -112,8 +246,25 @@ export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
           <TouchableOpacity style={styles.actionButton}>
             <Text style={styles.actionButtonText}>Open Channel Chat</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteChannel}
+          >
+            <Text style={styles.deleteButtonText}>Delete Channel</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Add Members Modal */}
+      <AddMembersModal
+        visible={showAddMembersModal}
+        onClose={() => setShowAddMembersModal(false)}
+        onAddMembers={handleAddMembers}
+        friends={friends}
+        existingMembers={channelMembers}
+        channelName={channel.name}
+      />
     </View>
   );
 }
@@ -175,11 +326,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "white",
-    marginBottom: 16,
+  },
+  addMemberButton: {
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addMemberButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
   },
   membersList: {
     gap: 12,
@@ -214,10 +381,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
+    marginBottom: 12,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  deleteButton: {
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DC2626",
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#DC2626",
   },
 });

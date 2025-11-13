@@ -6,6 +6,12 @@ export interface Friend {
   message: string;
   avatar: string;
   online: boolean;
+  // Profile information
+  email?: string;
+  phone?: string;
+  bio?: string;
+  profileImage?: string;
+  joinDate?: string;
 }
 
 export interface Channel {

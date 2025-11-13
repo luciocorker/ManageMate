@@ -1,4 +1,5 @@
 import { sendFriendRequest } from "@/supabase/supabaseClient";
+import * as Linking from "expo-linking";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -6,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -70,17 +72,52 @@ export default function AddFriendModal({
       });
 
       if (result) {
-        Alert.alert("Success!", `Friend request sent to ${friendName}`, [
-          {
-            text: "OK",
-            onPress: () => {
-              setFriendName("");
-              setFriendEmail("");
-              onClose();
-              onSuccess?.();
-            },
+        // Generate deep link for friend request
+        const friendRequestUrl = Linking.createURL("friend-request", {
+          queryParams: {
+            requestId: result.id,
+            senderName: currentUserName,
+            receiverEmail: friendEmail.trim().toLowerCase(),
+            receiverName: friendName.trim(),
           },
-        ]);
+        });
+
+        console.log("Generated friend request URL:", friendRequestUrl);
+
+        // Show success and share link
+        Alert.alert(
+          "Success!",
+          `Friend request created for ${friendName}. Share the invitation link with them.`,
+          [
+            {
+              text: "Share Link",
+              onPress: async () => {
+                try {
+                  await Share.share({
+                    message: `${currentUserName} wants to connect with you on ManageMate! Click here to accept: ${friendRequestUrl}`,
+                    title: "Friend Request",
+                  });
+                  setFriendName("");
+                  setFriendEmail("");
+                  onClose();
+                  onSuccess?.();
+                } catch (error) {
+                  console.error("Error sharing:", error);
+                }
+              },
+            },
+            {
+              text: "Done",
+              onPress: () => {
+                setFriendName("");
+                setFriendEmail("");
+                onClose();
+                onSuccess?.();
+              },
+              style: "cancel",
+            },
+          ]
+        );
       } else {
         Alert.alert(
           "Error",

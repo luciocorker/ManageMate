@@ -70,16 +70,25 @@ interface ProfilePageProps {
 }
 
 export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
-  // Dummy profile data
-  const email = `${friend.name.toLowerCase().replace(" ", ".")}@example.com`;
-  const phone =
-    "+1 (555) " +
-    Math.floor(Math.random() * 900 + 100) +
-    "-" +
-    Math.floor(Math.random() * 9000 + 1000);
-  const bio =
-    "Software developer passionate about building amazing products. Love to collaborate and solve complex problems.";
-  const joinDate = "Joined March 2024";
+  // ============================================================================
+  // 🔒 PLACEHOLDER: AUTHENTICATION & PROFILE DATA
+  // ============================================================================
+  // TODO: Replace with Supabase Auth integration
+  // When Supabase Auth is implemented:
+  // 1. Fetch profile data from Supabase using authenticated user ID
+  // 2. Query user profiles table: SELECT * FROM profiles WHERE user_id = friend.id
+  // 3. Handle loading states and errors
+  // 4. Implement real-time profile updates
+  // ============================================================================
+
+  // Profile data - uses friend properties if available, otherwise placeholder data
+  const email =
+    friend.email ||
+    `${friend.name.toLowerCase().replace(" ", ".")}@example.com`;
+  const phone = friend.phone || "+1 (555) 000-0000";
+  const bio = friend.bio || "No bio available yet.";
+  const joinDate = friend.joinDate || "Joined recently";
+  const profileImage = friend.profileImage; // Will be used when images are implemented
 
   return (
     <View style={styles.container}>
@@ -94,18 +103,25 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
       <ScrollView style={styles.content}>
         {/* Profile Avatar Section */}
         <View style={styles.profileSection}>
+          {/* 🔒 PLACEHOLDER: Profile Image */}
+          {/* TODO: Replace with actual profile image from Supabase Storage */}
+          {/* When implemented: <Image source={{ uri: profileImage }} style={styles.profileImage} /> */}
           <View
             style={[styles.largeAvatar, { backgroundColor: friend.avatar }]}
           >
             <Text style={styles.largeAvatarText}>{friend.name.charAt(0)}</Text>
           </View>
           <Text style={styles.name}>{friend.name}</Text>
+
+          {/* ✅ FUNCTIONAL: Online status (placeholder data) */}
           <Text style={styles.status}>
             {friend.online ? "🟢 Online" : "⚫ Offline"}
           </Text>
         </View>
 
         {/* Bio Section */}
+        {/* 🔒 PLACEHOLDER: Bio data - READ ONLY */}
+        {/* TODO: Fetch from Supabase profiles table when Auth is implemented */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.card}>
@@ -114,6 +130,8 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
         </View>
 
         {/* Contact Info Section */}
+        {/* 🔒 PLACEHOLDER: Contact information - READ ONLY */}
+        {/* TODO: Fetch from Supabase profiles table when Auth is implemented */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
 
@@ -155,11 +173,22 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
         </View>
 
         {/* Actions */}
+        {/* ✅ FUNCTIONAL: Navigation back to chat */}
         <View style={styles.section}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={styles.actionButton} onPress={onBack}>
             <MessageIcon />
-            <Text style={styles.actionButtonText}>Send Message</Text>
+            <Text style={styles.actionButtonText}>Back to Chat</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* READ-ONLY NOTICE */}
+        <View style={styles.section}>
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              👁️ Profile is read-only. You're viewing {friend.name}'s
+              information.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -286,5 +315,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  noticeCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#DC2626",
+  },
+  noticeText: {
+    fontSize: 14,
+    color: "#ccc",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

@@ -1,3 +1,23 @@
+// ============================================================================
+// CHAT SCREEN - Direct Messaging Between Friends
+// ============================================================================
+// ✅ FUNCTIONAL FEATURES:
+// - Real-time messaging via Socket.IO
+// - Message persistence via Supabase
+// - Friend list navigation
+// - Profile viewing (read-only)
+// - Message reactions (UI only)
+// - Reply functionality (UI only)
+//
+// 🔒 PLACEHOLDER FEATURES (Need Supabase Auth):
+// - User authentication (currently using placeholder AuthContext)
+// - Secure user ID-based messaging
+// - Profile data fetching from authenticated user
+// ============================================================================
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useSocket } from "@/contexts/SocketContext";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
 import ProfilePage from "@/pages/ProfilePage";
 import {
   getDirectMessages,
@@ -100,9 +120,6 @@ const OnlineIndicator = () => (
   </Svg>
 );
 
-// Current user (replace with actual auth later)
-const CURRENT_USER = "Lee";
-
 interface MessageReaction {
   emoji: string;
   count: number;
@@ -132,6 +149,25 @@ interface ChatScreenProps {
 }
 
 export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
+  // ============================================================================
+  // 🔒 PLACEHOLDER: Authentication Context
+  // ============================================================================
+  // TODO: Replace with Supabase Auth
+  // Currently using placeholder AuthContext with username-based authentication
+  // When Supabase Auth is implemented:
+  // 1. Use authenticated user ID instead of username
+  // 2. Secure all API calls with RLS policies
+  // 3. Fetch friend's profile data from profiles table
+  // ============================================================================
+  const { user } = useAuth();
+  const socket = useSocket();
+
+  // ============================================================================
+  // ✅ FUNCTIONAL: Unread message tracking
+  // Mark messages as read when user opens this chat
+  // ============================================================================
+  const { markAsRead } = useUnreadMessages();
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [showProfile, setShowProfile] = useState(false);
@@ -144,24 +180,79 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
   );
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Load messages on mount
+  // ✅ FUNCTIONAL: Real-time messaging room ID
+  // Create a unique room ID for direct messages between two users
+  const roomId = [user?.name, friend.name].sort().join("_");
+
+  // ============================================================================
+  // ✅ FUNCTIONAL: Mark conversation as read when user opens chat
+  // This clears the unread badge for this conversation
+  // ============================================================================
+  useEffect(() => {
+    markAsRead(roomId);
+  }, [roomId]);
+
+  // ✅ FUNCTIONAL: Load messages from Supabase on mount
   useEffect(() => {
     loadMessages();
   }, [friend.name]);
 
+  // ✅ FUNCTIONAL: Setup Socket.IO listeners for real-time messages
+  useEffect(() => {
+    if (!socket.isConnected || !user) return;
+
+    // Join the direct message room
+    socket.joinChannel(roomId);
+
+    // Listen for new messages
+    socket.onNewMessage((message: any) => {
+      // Only add messages for this conversation
+      if (message.roomId === roomId) {
+        const newMessage: Message = {
+          id: message.id,
+          text: message.text,
+          sender: message.senderName === user.name ? "me" : "them",
+          senderName: message.senderName,
+          timestamp: new Date(message.createdAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+
+        setMessages((prev) => [...prev, newMessage]);
+
+        // ============================================================================
+        // ✅ FUNCTIONAL: Mark messages as read when chat is open
+        // Since the user is viewing this chat, clear the unread badge immediately
+        // ============================================================================
+        markAsRead(roomId);
+
+        // Scroll to bottom when new message arrives
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socket.leaveChannel(roomId);
+      socket.offNewMessage();
+    };
+  }, [socket.isConnected, user, friend.name, roomId]);
+
   async function loadMessages() {
+    if (!user) return;
+
     setLoading(true);
     try {
-      const supabaseMessages = await getDirectMessages(
-        CURRENT_USER,
-        friend.name
-      );
+      const messagesData = await getDirectMessages(user.name, friend.name);
 
       // Transform Supabase messages to display format
-      const displayMessages: Message[] = supabaseMessages.map((msg) => ({
+      const displayMessages: Message[] = messagesData.map((msg) => ({
         id: msg.id,
         text: msg.text,
-        sender: msg.sender_name === CURRENT_USER ? "me" : "them",
+        sender: msg.sender_name === user.name ? "me" : "them",
         senderName: msg.sender_name,
         timestamp: new Date(msg.created_at).toLocaleTimeString([], {
           hour: "2-digit",
@@ -177,24 +268,34 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
     }
   }
 
-  // If profile is open, show ProfilePage
+  // ✅ FUNCTIONAL: Profile viewing modal/page
+  // Shows friend's profile information (read-only)
   if (showProfile) {
     return <ProfilePage friend={friend} onBack={() => setShowProfile(false)} />;
   }
 
   const handleSend = async () => {
-    if (inputText.trim() && !sending) {
+    if (inputText.trim() && !sending && user) {
       setSending(true);
       try {
         // Save message to Supabase
         const savedMessage = await sendMessageToFriend(
-          CURRENT_USER,
+          user.name,
           friend.name,
           inputText.trim()
         );
 
         if (savedMessage) {
-          // Add message to local state
+          // Send message via Socket.IO for real-time delivery
+          socket.sendMessage(roomId, {
+            id: savedMessage.id,
+            text: savedMessage.text,
+            senderName: savedMessage.sender_name,
+            createdAt: savedMessage.created_at,
+            roomId: roomId,
+          });
+
+          // Add message to local state (will also be received via socket)
           const newMessage: Message = {
             id: savedMessage.id,
             text: savedMessage.text,
@@ -298,13 +399,19 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
     >
       {/* Header */}
       <View style={styles.header}>
+        {/* ✅ FUNCTIONAL: Back navigation to friend list */}
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <BackIcon />
         </TouchableOpacity>
+
+        {/* ✅ FUNCTIONAL: Clickable profile avatar - opens friend's profile */}
+        {/* Click here to view friend's profile information (read-only) */}
         <TouchableOpacity
           style={styles.headerInfo}
           onPress={() => setShowProfile(true)}
         >
+          {/* 🔒 PLACEHOLDER: Profile image - currently using colored avatar with initial */}
+          {/* TODO: Replace with actual profile image from Supabase Storage */}
           <View
             style={[styles.headerAvatar, { backgroundColor: friend.avatar }]}
           >
@@ -312,6 +419,7 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{friend.name}</Text>
+            {/* ✅ FUNCTIONAL: Online status indicator (placeholder data) */}
             {friend.online && (
               <View style={styles.onlineStatus}>
                 <OnlineIndicator />
@@ -469,7 +577,7 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
               {message.sender === "me" && (
                 <View style={[styles.messageAvatar, styles.myAvatar]}>
                   <Text style={styles.messageAvatarText}>
-                    {CURRENT_USER.charAt(0)}
+                    {user?.name.charAt(0) || "U"}
                   </Text>
                 </View>
               )}

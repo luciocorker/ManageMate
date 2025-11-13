@@ -60,6 +60,30 @@ export async function getChannels(): Promise<Channel[]> {
   }
 }
 
+/**
+ * Delete a channel and all associated data
+ * This will cascade delete channel members and messages due to database constraints
+ */
+export async function deleteChannel(channelId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("channels")
+      .delete()
+      .eq("id", channelId);
+
+    if (error) {
+      console.error("Error deleting channel:", error);
+      return false;
+    }
+
+    console.log(`Channel ${channelId} deleted successfully`);
+    return true;
+  } catch (error) {
+    console.error("Unexpected error deleting channel:", error);
+    return false;
+  }
+}
+
 // ==========================================
 // FRIEND FUNCTIONS
 // ==========================================
@@ -643,6 +667,178 @@ export async function getMessagesReactionsSummary(
   } catch (error) {
     console.error("Exception in getMessagesReactionsSummary:", error);
     return new Map();
+  }
+}
+
+// ==================== Channel Member Functions ====================
+
+/**
+ * Add a member to a channel
+ */
+export async function addChannelMember(
+  channelId: string,
+  userName: string,
+  addedBy: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("channel_members").insert([
+      {
+        channel_id: channelId,
+        user_name: userName,
+        added_by: addedBy,
+      },
+    ]);
+
+    if (error) {
+      // If it's a unique constraint violation, the member is already in the channel
+      if (error.code === "23505") {
+        console.log("Member already in channel");
+        return true; // Not an error, just already exists
+      }
+      console.error("Error adding channel member:", error);
+      return false;
+    }
+
+    console.log(`Member ${userName} added to channel ${channelId}`);
+    return true;
+  } catch (error) {
+    console.error("Exception in addChannelMember:", error);
+    return false;
+  }
+}
+
+/**
+ * Add multiple members to a channel
+ */
+export async function addChannelMembers(
+  channelId: string,
+  userNames: string[],
+  addedBy: string
+): Promise<boolean> {
+  try {
+    const members = userNames.map((userName) => ({
+      channel_id: channelId,
+      user_name: userName,
+      added_by: addedBy,
+    }));
+
+    const { error } = await supabase.from("channel_members").insert(members);
+
+    if (error) {
+      console.error("Error adding channel members:", error);
+      return false;
+    }
+
+    console.log(`${userNames.length} members added to channel ${channelId}`);
+    return true;
+  } catch (error) {
+    console.error("Exception in addChannelMembers:", error);
+    return false;
+  }
+}
+
+/**
+ * Remove a member from a channel
+ */
+export async function removeChannelMember(
+  channelId: string,
+  userName: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("channel_members")
+      .delete()
+      .eq("channel_id", channelId)
+      .eq("user_name", userName);
+
+    if (error) {
+      console.error("Error removing channel member:", error);
+      return false;
+    }
+
+    console.log(`Member ${userName} removed from channel ${channelId}`);
+    return true;
+  } catch (error) {
+    console.error("Exception in removeChannelMember:", error);
+    return false;
+  }
+}
+
+/**
+ * Get all members of a channel
+ */
+export async function getChannelMembers(channelId: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from("channel_members")
+      .select("user_name")
+      .eq("channel_id", channelId);
+
+    if (error) {
+      console.error("Error fetching channel members:", error);
+      return [];
+    }
+
+    return data?.map((member) => member.user_name) || [];
+  } catch (error) {
+    console.error("Exception in getChannelMembers:", error);
+    return [];
+  }
+}
+
+/**
+ * Get all channels a user is a member of
+ */
+export async function getUserChannels(userName: string): Promise<Channel[]> {
+  try {
+    const { data, error } = await supabase
+      .from("channel_members")
+      .select("channel_id, channels(*)")
+      .eq("user_name", userName);
+
+    if (error) {
+      console.error("Error fetching user channels:", error);
+      return [];
+    }
+
+    // Extract the channel data from the joined result
+    const channels =
+      data
+        ?.map((item: any) => item.channels)
+        .filter((channel: any) => channel !== null) || [];
+
+    return channels;
+  } catch (error) {
+    console.error("Exception in getUserChannels:", error);
+    return [];
+  }
+}
+
+/**
+ * Check if a user is a member of a channel
+ */
+export async function isChannelMember(
+  channelId: string,
+  userName: string
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from("channel_members")
+      .select("id")
+      .eq("channel_id", channelId)
+      .eq("user_name", userName)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 is "no rows returned"
+      console.error("Error checking channel membership:", error);
+      return false;
+    }
+
+    return data !== null;
+  } catch (error) {
+    console.error("Exception in isChannelMember:", error);
+    return false;
   }
 }
 
