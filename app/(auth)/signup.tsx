@@ -1,7 +1,18 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { auth } from "@/lib/firebase";
+import {
+  signInWithApple,
+  signInWithGithub,
+  signInWithGoogle,
+} from "@/lib/socialAuth";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  updateProfile,
+} from "firebase/auth";
 import { useState } from "react";
 import {
   Alert,
@@ -43,33 +54,95 @@ export default function SignUpScreen() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
+      // Create user in Firebase
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
         email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-          },
-        },
+        password
+      );
+      const user = userCredential.user;
+
+      // Update Firebase profile with display name
+      await updateProfile(user, {
+        displayName: name,
       });
 
+      // Send email verification
+      await sendEmailVerification(user);
+
+      // Store user info in Supabase
+      const { error: supabaseError } = await supabase.from("users").insert([
+        {
+          firebase_uid: user.uid,
+          email: user.email,
+          full_name: name,
+          email_verified: false,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (supabaseError) {
+        console.warn("Supabase storage error:", supabaseError);
+      }
+
       setLoading(false);
 
-      if (error) {
-        Alert.alert("Sign Up Failed", error.message);
-      } else {
-        Alert.alert(
-          "Success",
-          "Account created! Please check your email to verify your account.",
-          [{ text: "OK", onPress: () => router.replace("/(auth)/signin") }]
-        );
-      }
-    } catch (err) {
-      setLoading(false);
       Alert.alert(
-        "Connection Error",
-        "Unable to connect. Please check your internet connection and Supabase configuration."
+        "Success!",
+        "Account created! Please check your email and verify your account before signing in.",
+        [{ text: "OK", onPress: () => router.replace("/(auth)/signin") }]
       );
+    } catch (error: any) {
+      setLoading(false);
+      let errorMessage = "An error occurred during sign up";
+
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage = "This email is already registered";
+      } else if (error.code === "auth/invalid-email") {
+        errorMessage = "Invalid email address";
+      } else if (error.code === "auth/weak-password") {
+        errorMessage = "Password is too weak";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert("Sign Up Failed", errorMessage);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    setLoading(true);
+    const result = await signInWithGoogle();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else {
+      Alert.alert("Google Sign Up Failed", result.error || "An error occurred");
+    }
+  };
+
+  const handleAppleSignUp = async () => {
+    setLoading(true);
+    const result = await signInWithApple();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else if (result.error !== "Sign in was canceled") {
+      Alert.alert("Apple Sign Up Failed", result.error || "An error occurred");
+    }
+  };
+
+  const handleGithubSignUp = async () => {
+    setLoading(true);
+    const result = await signInWithGithub();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else {
+      Alert.alert("GitHub Sign Up Failed", result.error || "An error occurred");
     }
   };
 
@@ -82,7 +155,7 @@ export default function SignUpScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
+        <LinearGradient colors={["#ff6b6b", "#ff8787"]} style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -105,14 +178,14 @@ export default function SignUpScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Full Name</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="person.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="person.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your full name"
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
             </View>
           </View>
@@ -120,7 +193,7 @@ export default function SignUpScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="envelope.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="envelope.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
@@ -129,7 +202,7 @@ export default function SignUpScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
             </View>
           </View>
@@ -137,7 +210,7 @@ export default function SignUpScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="lock.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="lock.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Create a password"
@@ -146,13 +219,13 @@ export default function SignUpScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <IconSymbol
                   name={showPassword ? "eye.slash.fill" : "eye.fill"}
                   size={20}
-                  color="#9ca3af"
+                  color="#ff6b6b"
                 />
               </TouchableOpacity>
             </View>
@@ -161,7 +234,7 @@ export default function SignUpScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Confirm Password</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="lock.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="lock.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Confirm your password"
@@ -170,7 +243,7 @@ export default function SignUpScreen() {
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}
@@ -178,7 +251,7 @@ export default function SignUpScreen() {
                 <IconSymbol
                   name={showConfirmPassword ? "eye.slash.fill" : "eye.fill"}
                   size={20}
-                  color="#9ca3af"
+                  color="#ff6b6b"
                 />
               </TouchableOpacity>
             </View>
@@ -200,14 +273,37 @@ export default function SignUpScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.socialButton}>
-            <IconSymbol name="apple.logo" size={20} color="#000" />
-            <Text style={styles.socialButtonText}>Continue with Apple</Text>
-          </TouchableOpacity>
+          {Platform.OS === "ios" && (
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={handleAppleSignUp}
+              disabled={loading}
+            >
+              <IconSymbol name="apple.logo" size={20} color="#000" />
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity style={styles.socialButton}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGoogleSignUp}
+            disabled={loading}
+          >
             <Text style={styles.googleIcon}>G</Text>
             <Text style={styles.socialButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGithubSignUp}
+            disabled={loading}
+          >
+            <IconSymbol
+              name="chevron.left.forwardslash.chevron.right"
+              size={20}
+              color="#000"
+            />
+            <Text style={styles.socialButtonText}>Continue with GitHub</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -249,7 +345,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -262,7 +358,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -280,7 +376,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
+    color: "rgba(255, 255, 255, 0.95)",
   },
   formContainer: {
     flex: 1,
@@ -294,15 +390,15 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: "#2d3748",
     marginBottom: 8,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 56,
@@ -311,7 +407,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#111827",
+    color: "#2d3748",
   },
   signUpButton: {
     backgroundColor: "#ff6b6b",
@@ -320,6 +416,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 24,
     marginTop: 8,
+    shadowColor: "#ff6b6b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -327,7 +428,7 @@ const styles = StyleSheet.create({
   signUpButtonText: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   divider: {
     flexDirection: "row",
@@ -337,20 +438,20 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: "#9ca3af",
+    color: "#a0aec0",
   },
   socialButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
     paddingVertical: 14,
     borderRadius: 12,
     marginBottom: 12,
@@ -359,7 +460,7 @@ const styles = StyleSheet.create({
   socialButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: "#2d3748",
   },
   googleIcon: {
     fontSize: 20,
@@ -373,22 +474,22 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#718096",
   },
   footerLink: {
     fontSize: 14,
-    color: "#667eea",
-    fontWeight: "600",
+    color: "#ff6b6b",
+    fontWeight: "700",
   },
   terms: {
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0aec0",
     textAlign: "center",
     marginTop: 16,
     lineHeight: 18,
   },
   termsLink: {
-    color: "#667eea",
+    color: "#ff6b6b",
     fontWeight: "600",
   },
 });

@@ -38,7 +38,7 @@ export default function LandingScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Hero Section */}
       <LinearGradient
-        colors={["#667eea", "#764ba2"]}
+        colors={["#ff6b6b", "#ff8787", "#ffa5a5"]}
         style={styles.heroSection}
       >
         <View style={styles.heroContent}>
@@ -65,7 +65,7 @@ export default function LandingScreen() {
               onPress={() => router.push("/(auth)/signup")}
             >
               <Text style={styles.primaryButtonText}>Get Started</Text>
-              <IconSymbol name="arrow.right" size={20} color="#fff" />
+              <IconSymbol name="arrow.right" size={20} color="#ff6b6b" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -86,7 +86,7 @@ export default function LandingScreen() {
         </Text>
 
         <View style={styles.featuresGrid}>
-          <View style={[styles.featureCard, { backgroundColor: "#fff5f5" }]}>
+          <View style={styles.featureCard}>
             <View style={[styles.featureIcon, { backgroundColor: "#ff6b6b" }]}>
               <IconSymbol name="checkmark.circle.fill" size={32} color="#fff" />
             </View>
@@ -96,8 +96,8 @@ export default function LandingScreen() {
             </Text>
           </View>
 
-          <View style={[styles.featureCard, { backgroundColor: "#f0f9ff" }]}>
-            <View style={[styles.featureIcon, { backgroundColor: "#3b82f6" }]}>
+          <View style={styles.featureCard}>
+            <View style={[styles.featureIcon, { backgroundColor: "#ff8787" }]}>
               <IconSymbol name="person.2.fill" size={32} color="#fff" />
             </View>
             <Text style={styles.featureTitle}>Team Collaboration</Text>
@@ -106,8 +106,8 @@ export default function LandingScreen() {
             </Text>
           </View>
 
-          <View style={[styles.featureCard, { backgroundColor: "#faf5ff" }]}>
-            <View style={[styles.featureIcon, { backgroundColor: "#a855f7" }]}>
+          <View style={styles.featureCard}>
+            <View style={[styles.featureIcon, { backgroundColor: "#ffa5a5" }]}>
               <IconSymbol name="folder.fill" size={32} color="#fff" />
             </View>
             <Text style={styles.featureTitle}>Workspace Management</Text>
@@ -134,18 +134,21 @@ export default function LandingScreen() {
             </View>
             <View style={styles.featuresList}>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>Up to 5 team members</Text>
               </View>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>3 projects</Text>
               </View>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>Basic task management</Text>
               </View>
             </View>
+            <TouchableOpacity style={styles.planButton}>
+              <Text style={styles.planButtonText}>Get Started</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={[styles.pricingCard, styles.popularCard]}>
@@ -159,18 +162,21 @@ export default function LandingScreen() {
             </View>
             <View style={styles.featuresList}>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>Unlimited members</Text>
               </View>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>Unlimited projects</Text>
               </View>
               <View style={styles.featureItem}>
-                <IconSymbol name="checkmark.circle" size={20} color="#10b981" />
+                <IconSymbol name="checkmark.circle" size={20} color="#ff6b6b" />
                 <Text style={styles.featureText}>Advanced analytics</Text>
               </View>
             </View>
+            <TouchableOpacity style={styles.planButtonPrimary}>
+              <Text style={styles.planButtonPrimaryText}>Start Free Trial</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -193,7 +199,7 @@ export default function LandingScreen() {
                 <IconSymbol
                   name={expandedFAQ === index ? "chevron.up" : "chevron.down"}
                   size={20}
-                  color="#6b7280"
+                  color="#ff6b6b"
                 />
               </View>
               {expandedFAQ === index && (
@@ -205,7 +211,7 @@ export default function LandingScreen() {
       </View>
 
       {/* Footer CTA */}
-      <View style={styles.footerCTA}>
+      <LinearGradient colors={["#ff6b6b", "#ff8787"]} style={styles.footerCTA}>
         <Text style={styles.footerTitle}>Ready to get started?</Text>
         <TouchableOpacity
           style={styles.footerButton}
@@ -213,7 +219,7 @@ export default function LandingScreen() {
         >
           <Text style={styles.footerButtonText}>Create Free Account</Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -247,7 +253,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -266,11 +272,14 @@ const styles = StyleSheet.create({
     lineHeight: 44,
   },
   heroHighlight: {
-    color: "#fbbf24",
+    color: "#fff",
+    textShadowColor: "rgba(0, 0, 0, 0.1)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   heroSubtitle: {
     fontSize: 18,
-    color: "rgba(255, 255, 255, 0.9)",
+    color: "rgba(255, 255, 255, 0.95)",
     textAlign: "center",
     marginBottom: 32,
     lineHeight: 26,
@@ -281,7 +290,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   primaryButton: {
-    backgroundColor: "#ff6b6b",
+    backgroundColor: "#fff",
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -289,19 +298,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   primaryButtonText: {
-    color: "#fff",
+    color: "#ff6b6b",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   secondaryButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "transparent",
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: "rgba(255, 255, 255, 0.3)",
+    borderColor: "rgba(255, 255, 255, 0.5)",
   },
   secondaryButtonText: {
     color: "#fff",
@@ -316,13 +330,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 28,
     fontWeight: "800",
-    color: "#111827",
+    color: "#2d3748",
     textAlign: "center",
     marginBottom: 12,
   },
   sectionSubtitle: {
     fontSize: 16,
-    color: "#6b7280",
+    color: "#718096",
     textAlign: "center",
     marginBottom: 32,
   },
@@ -330,9 +344,17 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   featureCard: {
+    backgroundColor: "#fff",
     padding: 24,
     borderRadius: 16,
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f7fafc",
   },
   featureIcon: {
     width: 64,
@@ -345,18 +367,18 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#111827",
+    color: "#2d3748",
     marginBottom: 8,
     textAlign: "center",
   },
   featureDescription: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#718096",
     textAlign: "center",
     lineHeight: 20,
   },
   pricingSection: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#f7fafc",
   },
   pricingCards: {
     gap: 16,
@@ -366,7 +388,12 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   popularCard: {
     borderColor: "#ff6b6b",
@@ -380,6 +407,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
+    shadowColor: "#ff6b6b",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   popularText: {
     color: "#fff",
@@ -389,7 +421,7 @@ const styles = StyleSheet.create({
   planName: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#111827",
+    color: "#2d3748",
     marginBottom: 8,
   },
   priceContainer: {
@@ -400,15 +432,16 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 40,
     fontWeight: "800",
-    color: "#111827",
+    color: "#ff6b6b",
   },
   priceUnit: {
     fontSize: 16,
-    color: "#6b7280",
+    color: "#718096",
     marginLeft: 4,
   },
   featuresList: {
     gap: 12,
+    marginBottom: 24,
   },
   featureItem: {
     flexDirection: "row",
@@ -417,7 +450,36 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 14,
-    color: "#4b5563",
+    color: "#4a5568",
+  },
+  planButton: {
+    backgroundColor: "#f7fafc",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  planButtonText: {
+    color: "#2d3748",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  planButtonPrimary: {
+    backgroundColor: "#ff6b6b",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    shadowColor: "#ff6b6b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  planButtonPrimaryText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
   faqContainer: {
     gap: 12,
@@ -427,7 +489,12 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   faqHeader: {
     flexDirection: "row",
@@ -437,17 +504,16 @@ const styles = StyleSheet.create({
   faqQuestion: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#111827",
+    color: "#2d3748",
     flex: 1,
   },
   faqAnswer: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#718096",
     marginTop: 12,
     lineHeight: 20,
   },
   footerCTA: {
-    backgroundColor: "#667eea",
     paddingVertical: 40,
     paddingHorizontal: 20,
     alignItems: "center",
@@ -464,19 +530,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   footerButtonText: {
-    color: "#667eea",
+    color: "#ff6b6b",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   footer: {
     paddingVertical: 24,
     alignItems: "center",
-    backgroundColor: "#111827",
+    backgroundColor: "#2d3748",
   },
   footerText: {
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#a0aec0",
   },
 });

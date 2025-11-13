@@ -1,7 +1,13 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { auth } from "@/lib/firebase";
+import { signInWithApple, signInWithGoogle } from "@/lib/socialAuth";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
+import {
+  sendEmailVerification,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { useState } from "react";
 import {
   Alert,
@@ -30,24 +36,104 @@ export default function SignInScreen() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
         email,
-        password,
-      });
-
-      setLoading(false);
-
-      if (error) {
-        Alert.alert("Sign In Failed", error.message);
-      } else {
-        router.replace("/(tabs)/dashboard");
-      }
-    } catch (err) {
-      setLoading(false);
-      Alert.alert(
-        "Connection Error",
-        "Unable to connect. Please check your internet connection and Supabase configuration."
+        password
       );
+      const user = userCredential.user;
+
+      // Check if email is verified
+      if (!user.emailVerified) {
+        setLoading(false);
+        Alert.alert(
+          "Email Not Verified",
+          "Please verify your email before signing in. Check your inbox for the verification link.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Resend Email",
+              onPress: async () => {
+                try {
+                  await sendEmailVerification(user);
+                  Alert.alert("Success", "Verification email sent!");
+                } catch (err) {
+                  Alert.alert("Error", "Failed to send verification email");
+                }
+              },
+            },
+          ]
+        );
+        // Sign out the user since they're not verified
+        await auth.signOut();
+        return;
+      }
+
+      // Update Supabase with verified status
+      await supabase
+        .from("users")
+        .update({ email_verified: true })
+        .eq("firebase_uid", user.uid);
+
+      setLoading(false);
+      router.replace("/(tabs)/dashboard");
+    } catch (error: any) {
+      setLoading(false);
+      let errorMessage = "An error occurred during sign in";
+
+      if (error.code === "auth/invalid-email") {
+        errorMessage = "Invalid email address";
+      } else if (error.code === "auth/user-not-found") {
+        errorMessage = "No account found with this email";
+      } else if (error.code === "auth/wrong-password") {
+        errorMessage = "Incorrect password";
+      } else if (error.code === "auth/invalid-credential") {
+        errorMessage = "Invalid email or password";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert("Sign In Failed", errorMessage);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    router.push("/(auth)/forgot-password");
+  };
+
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    const result = await signInWithGoogle();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else {
+      Alert.alert("Google Sign In Failed", result.error || "An error occurred");
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setLoading(true);
+    const result = await signInWithApple();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else if (result.error !== "Sign in was canceled") {
+      Alert.alert("Apple Sign In Failed", result.error || "An error occurred");
+    }
+  };
+
+  const handleGithubSignIn = async () => {
+    setLoading(true);
+    const result = await signInWithGithub();
+    setLoading(false);
+
+    if (result.success) {
+      router.replace("/(tabs)/dashboard");
+    } else {
+      Alert.alert("GitHub Sign In Failed", result.error || "An error occurred");
     }
   };
 
@@ -60,7 +146,7 @@ export default function SignInScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
+        <LinearGradient colors={["#ff6b6b", "#ff8787"]} style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
@@ -83,7 +169,7 @@ export default function SignInScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="envelope.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="envelope.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
@@ -92,7 +178,7 @@ export default function SignInScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
             </View>
           </View>
@@ -100,7 +186,7 @@ export default function SignInScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={styles.inputContainer}>
-              <IconSymbol name="lock.fill" size={20} color="#9ca3af" />
+              <IconSymbol name="lock.fill" size={20} color="#ff6b6b" />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your password"
@@ -109,19 +195,22 @@ export default function SignInScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor="#a0aec0"
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                 <IconSymbol
                   name={showPassword ? "eye.slash.fill" : "eye.fill"}
                   size={20}
-                  color="#9ca3af"
+                  color="#ff6b6b"
                 />
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity
+            style={styles.forgotPassword}
+            onPress={handleForgotPassword}
+          >
             <Text style={styles.forgotPasswordText}>Forgot password?</Text>
           </TouchableOpacity>
 
@@ -141,14 +230,37 @@ export default function SignInScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.socialButton}>
-            <IconSymbol name="apple.logo" size={20} color="#000" />
-            <Text style={styles.socialButtonText}>Continue with Apple</Text>
-          </TouchableOpacity>
+          {Platform.OS === "ios" && (
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={handleAppleSignIn}
+              disabled={loading}
+            >
+              <IconSymbol name="apple.logo" size={20} color="#000" />
+              <Text style={styles.socialButtonText}>Continue with Apple</Text>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity style={styles.socialButton}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGoogleSignIn}
+            disabled={loading}
+          >
             <Text style={styles.googleIcon}>G</Text>
             <Text style={styles.socialButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGithubSignIn}
+            disabled={loading}
+          >
+            <IconSymbol
+              name="chevron.left.forwardslash.chevron.right"
+              size={20}
+              color="#000"
+            />
+            <Text style={styles.socialButtonText}>Continue with GitHub</Text>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -184,7 +296,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -197,7 +309,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -215,7 +327,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
+    color: "rgba(255, 255, 255, 0.95)",
   },
   formContainer: {
     flex: 1,
@@ -229,15 +341,15 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: "#2d3748",
     marginBottom: 8,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 56,
@@ -246,7 +358,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#111827",
+    color: "#2d3748",
   },
   forgotPassword: {
     alignSelf: "flex-end",
@@ -254,7 +366,7 @@ const styles = StyleSheet.create({
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: "#667eea",
+    color: "#ff6b6b",
     fontWeight: "600",
   },
   signInButton: {
@@ -263,6 +375,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     marginBottom: 24,
+    shadowColor: "#ff6b6b",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -270,7 +387,7 @@ const styles = StyleSheet.create({
   signInButtonText: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   divider: {
     flexDirection: "row",
@@ -280,20 +397,20 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#e2e8f0",
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: "#9ca3af",
+    color: "#a0aec0",
   },
   socialButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
     paddingVertical: 14,
     borderRadius: 12,
     marginBottom: 12,
@@ -302,7 +419,7 @@ const styles = StyleSheet.create({
   socialButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#374151",
+    color: "#2d3748",
   },
   googleIcon: {
     fontSize: 20,
@@ -316,11 +433,11 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#718096",
   },
   footerLink: {
     fontSize: 14,
-    color: "#667eea",
-    fontWeight: "600",
+    color: "#ff6b6b",
+    fontWeight: "700",
   },
 });

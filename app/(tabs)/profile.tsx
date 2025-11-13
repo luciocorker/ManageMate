@@ -1,6 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { supabase } from "@/lib/supabase";
+import { auth } from "@/lib/firebase";
 import { router } from "expo-router";
 import { Alert, ScrollView, StyleSheet, TouchableOpacity } from "react-native";
 
@@ -13,7 +13,7 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await supabase.auth.signOut();
+            await auth.signOut();
             router.replace("/(auth)/landing");
           } catch (error) {
             console.warn("Sign out error:", error);

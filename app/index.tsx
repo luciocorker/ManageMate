@@ -1,5 +1,6 @@
-import { supabase } from "@/lib/supabase";
+import { auth } from "@/lib/firebase";
 import { Redirect } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
@@ -7,21 +8,14 @@ export default function Index() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    // Listen to auth state changes
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+    });
 
-  const checkAuth = async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setIsAuthenticated(!!session);
-    } catch (error) {
-      console.warn("Auth check failed:", error);
-      // If auth check fails, assume not authenticated and show landing
-      setIsAuthenticated(false);
-    }
-  };
+    // Cleanup subscription
+    return () => unsubscribe();
+  }, []);
 
   if (isAuthenticated === null) {
     return (
