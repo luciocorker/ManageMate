@@ -1,3 +1,4 @@
+import AuthGate from "@/components/AuthGate";
 import MessageNotificationToast from "@/components/MessageNotificationToast";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { RealtimeProvider } from "@/contexts/RealtimeContext";
@@ -27,17 +28,19 @@ export default function RootLayout() {
           <ThemeProvider
             value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
           >
-            {/* Global popup notification for new messages */}
-            <MessageNotificationToast />
+            <AuthGate>
+              {/* Global popup notification for new messages */}
+              <MessageNotificationToast />
 
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="modal"
-                options={{ presentation: "modal", title: "Modal" }}
-              />
-            </Stack>
-            <StatusBar style="auto" />
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="modal"
+                  options={{ presentation: "modal", title: "Modal" }}
+                />
+              </Stack>
+              <StatusBar style="auto" />
+            </AuthGate>
           </ThemeProvider>
         </UnreadMessagesProvider>
       </RealtimeProvider>
