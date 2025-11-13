@@ -4,11 +4,18 @@ import { ProjectCard } from '@/components/project-card';
 import { ThemedAlert } from '@/components/themed-alert';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { getProjectsWithTasks } from '@/data/mockData';
+import {
+    createProject,
+    deleteProject,
+    getFavoriteProjectIds,
+    getProjectsWithTasks,
+    toggleFavorite,
+    updateProject
+} from '@/lib/supabaseService';
 import { Project, ProjectPriority, ProjectStatus } from '@/types/project';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 type ViewMode = 'grid' | 'list';
 type SortOption = 'name' | 'date' | 'progress' | 'priority';
@@ -26,7 +33,8 @@ interface AlertConfig {
 
 export default function ProjectScreen() {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>(getProjectsWithTasks());
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<ProjectPriority | 'All'>('All');
@@ -35,11 +43,49 @@ export default function ProjectScreen() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSearchBar, setShowSearchBar] = useState(false);
   const [alert, setAlert] = useState<AlertConfig>({ visible: false, title: '' });
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+  // Load projects from Supabase
+  useEffect(() => {
+    loadProjects();
+    loadFavorites();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const data = await getProjectsWithTasks();
+      setProjects(data);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to load projects. Please try again.',
+        buttons: [{ text: 'OK' }]
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFavorites = async () => {
+    try {
+      const ids = await getFavoriteProjectIds();
+      setFavoriteIds(ids);
+    } catch (error) {
+      console.error('Error loading favorites:', error);
+    }
+  };
 
   // Filter and sort projects
   const getFilteredAndSortedProjects = () => {
-    let filtered = projects;
+    let filtered = projects.map(p => ({
+      ...p,
+      isFavorite: favoriteIds.includes(p.id)
+    }));
 
     // Search filter
     if (searchQuery) {
@@ -81,73 +127,149 @@ export default function ProjectScreen() {
 
   const filteredProjects = getFilteredAndSortedProjects();
 
+  // Show loading state
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.searchIconButton} disabled>
+            <IconSymbol name="magnifyingglass" size={24} color="#999" />
+          </TouchableOpacity>
+          <ThemedText type="title" style={styles.title}>Projects</ThemedText>
+          <TouchableOpacity style={styles.addButton} disabled>
+            <IconSymbol name="plus" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#DC2626" />
+          <ThemedText style={styles.loadingText}>Loading projects...</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
   // Actions
-  const handleFavoriteToggle = (projectId: number) => {
-    setProjects(projects.map(p =>
-      p.id === projectId ? { ...p, isFavorite: !p.isFavorite } : p
-    ));
-  };
-
-  const handleDuplicate = (project: Project) => {
-    const newProject: Project = {
-      ...project,
-      id: Math.max(...projects.map(p => p.id)) + 1,
-      name: `${project.name} (Copy)`,
-      status: 'Planning',
-      progress: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      tasks: project.tasks?.map(t => ({ ...t, id: Math.random(), completed: false })),
-    };
-    setProjects([newProject, ...projects]);
-    setAlert({
-      visible: true,
-      title: 'Success',
-      message: 'Project duplicated successfully',
-      buttons: [{ text: 'OK' }]
-    });
-  };
-
-  const handleTogglePause = (projectId: number) => {
-    setProjects(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, status: p.status === 'Paused' ? 'In Progress' : 'Paused' as ProjectStatus };
+  const handleFavoriteToggle = async (projectId: string) => {
+    try {
+      const isFavorite = await toggleFavorite(projectId);
+      if (isFavorite) {
+        setFavoriteIds([...favoriteIds, projectId]);
+      } else {
+        setFavoriteIds(favoriteIds.filter(id => id !== projectId));
       }
-      return p;
-    }));
+      // Update local state
+      setProjects(projects.map(p =>
+        p.id === projectId ? { ...p, isFavorite } : p
+      ));
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to update favorite',
+        buttons: [{ text: 'OK' }]
+      });
+    }
   };
 
-  const handleMarkComplete = (projectId: number) => {
-    setProjects(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, status: 'Completed' as ProjectStatus, progress: 100 };
-      }
-      return p;
-    }));
-    setAlert({
-      visible: true,
-      title: 'Success',
-      message: 'Project marked as complete',
-      buttons: [{ text: 'OK' }]
-    });
+  const handleDuplicate = async (project: Project) => {
+    try {
+      await createProject({
+        name: `${project.name} (Copy)`,
+        description: project.description || '',
+        status: 'Planning',
+        priority: project.priority,
+        deadline: project.deadline,
+        budget: project.budget?.toString(),
+        color: project.color,
+        teamMembers: project.team,
+      });
+      await loadProjects();
+      setAlert({
+        visible: true,
+        title: 'Success',
+        message: 'Project duplicated successfully',
+        buttons: [{ text: 'OK' }]
+      });
+    } catch (error) {
+      console.error('Error duplicating project:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to duplicate project',
+        buttons: [{ text: 'OK' }]
+      });
+    }
   };
 
-  const handleArchive = (projectId: number) => {
-    setProjects(projects.map(p => {
-      if (p.id === projectId) {
-        return { ...p, status: 'Archived' as ProjectStatus };
-      }
-      return p;
-    }));
-    setAlert({
-      visible: true,
-      title: 'Success',
-      message: 'Project archived',
-      buttons: [{ text: 'OK' }]
-    });
+  const handleTogglePause = async (projectId: string) => {
+    try {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+
+      await updateProject(projectId, {
+        status: project.status === 'Paused' ? 'In Progress' : 'Paused'
+      });
+      await loadProjects();
+    } catch (error) {
+      console.error('Error toggling pause:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to update project status',
+        buttons: [{ text: 'OK' }]
+      });
+    }
   };
 
-  const handleDelete = (projectId: number) => {
+  const handleMarkComplete = async (projectId: string) => {
+    try {
+      await updateProject(projectId, {
+        status: 'Completed',
+        progress: 100
+      });
+      await loadProjects();
+      setAlert({
+        visible: true,
+        title: 'Success',
+        message: 'Project marked as complete',
+        buttons: [{ text: 'OK' }]
+      });
+    } catch (error) {
+      console.error('Error marking complete:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to complete project',
+        buttons: [{ text: 'OK' }]
+      });
+    }
+  };
+
+  const handleArchive = async (projectId: string) => {
+    try {
+      await updateProject(projectId, {
+        status: 'Archived'
+      });
+      await loadProjects();
+      setAlert({
+        visible: true,
+        title: 'Success',
+        message: 'Project archived',
+        buttons: [{ text: 'OK' }]
+      });
+    } catch (error) {
+      console.error('Error archiving project:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to archive project',
+        buttons: [{ text: 'OK' }]
+      });
+    }
+  };
+
+  const handleDelete = (projectId: string) => {
     setAlert({
       visible: true,
       title: 'Delete Project',
@@ -157,48 +279,63 @@ export default function ProjectScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setProjects(projects.filter(p => p.id !== projectId));
-            setAlert({
-              visible: true,
-              title: 'Success',
-              message: 'Project deleted',
-              buttons: [{ text: 'OK' }]
-            });
+          onPress: async () => {
+            try {
+              await deleteProject(projectId);
+              await loadProjects();
+              setAlert({
+                visible: true,
+                title: 'Success',
+                message: 'Project deleted',
+                buttons: [{ text: 'OK' }]
+              });
+            } catch (error) {
+              console.error('Error deleting project:', error);
+              setAlert({
+                visible: true,
+                title: 'Error',
+                message: 'Failed to delete project',
+                buttons: [{ text: 'OK' }]
+              });
+            }
           },
         },
       ]
     });
   };
 
-  const handleCreateProject = (formData: ProjectFormData) => {
-    const newProject: Project = {
-      id: Math.max(...projects.map(p => p.id)) + 1,
-      name: formData.name,
-      description: formData.description,
-      status: formData.status,
-      priority: formData.priority,
-      progress: 0,
-      color: '#DC2626',
-      deadline: formData.deadline,
-      budget: formData.budget ? parseFloat(formData.budget) : undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      tasks: [],
-      team: formData.team,
-      isFavorite: false,
-    };
-    setProjects([newProject, ...projects]);
-    setShowCreateModal(false);
-    setAlert({
-      visible: true,
-      title: 'Success',
-      message: 'Project created successfully',
-      buttons: [{ text: 'OK' }]
-    });
+  const handleCreateProject = async (formData: ProjectFormData) => {
+    try {
+      await createProject({
+        name: formData.name,
+        description: formData.description,
+        status: formData.status,
+        priority: formData.priority,
+        deadline: formData.deadline,
+        budget: formData.budget,
+        color: '#DC2626',
+        teamMembers: formData.team,
+      });
+      await loadProjects();
+      setShowCreateModal(false);
+      setAlert({
+        visible: true,
+        title: 'Success',
+        message: 'Project created successfully',
+        buttons: [{ text: 'OK' }]
+      });
+    } catch (error) {
+      console.error('Error creating project:', error);
+      setAlert({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to create project',
+        buttons: [{ text: 'OK' }]
+      });
+    }
   };
 
-  const handleProjectPress = (projectId: number) => {
+  const handleProjectPress = (projectId: string) => {
     router.push(`/project/${projectId}` as any);
   };
 
@@ -206,6 +343,12 @@ export default function ProjectScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.searchIconButton} 
+          onPress={() => setShowSearchBar(!showSearchBar)}
+        >
+          <IconSymbol name={showSearchBar ? "xmark" : "magnifyingglass"} size={24} color="#fff" />
+        </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>Projects</ThemedText>
         <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
           <IconSymbol name="plus" size={24} color="#fff" />
@@ -213,16 +356,24 @@ export default function ProjectScreen() {
       </View>
 
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <IconSymbol name="magnifyingglass" size={20} color="#999" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search projects..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
+      {showSearchBar && (
+        <View style={styles.searchContainer}>
+          <IconSymbol name="magnifyingglass" size={20} color="#999" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search projects..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <IconSymbol name="xmark" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Filters and Controls */}
       <View style={styles.controls}>
@@ -362,6 +513,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -369,11 +523,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
   },
+  searchIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1e1e1e',
+  },
   title: {
     flex: 1,
     fontSize: 28,
     fontWeight: 'bold',
     color: 'white',
+    textAlign: 'center',
+    marginHorizontal: 12,
   },
   addButton: {
     backgroundColor: '#DC2626',
@@ -382,9 +546,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'absolute',
-    right: 20,
-    top: 60,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -454,6 +615,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.6,
     textAlign: 'center',
+    color: '#999',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
     color: '#999',
   },
 });

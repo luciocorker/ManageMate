@@ -40,6 +40,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="project/[id]"
+        options={{
+          href: null, // This hides the route from the tab bar
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
@@ -71,10 +77,7 @@ export default function TabLayout() {
     
     {!isNavbarVisible && (
       <TouchableOpacity 
-        style={[
-          styles.toggleButton,
-          { backgroundColor: Colors[colorScheme ?? 'light'].background }
-        ]} 
+        style={styles.toggleButton} 
         onPress={toggleNavbar}
         activeOpacity={0.8}
       >
@@ -82,7 +85,6 @@ export default function TabLayout() {
           styles.toggleButtonInner,
           { 
             backgroundColor: Colors[colorScheme ?? 'light'].tint,
-            borderColor: Colors[colorScheme ?? 'light'].background
           }
         ]}>
           <IconSymbol 
@@ -120,8 +122,7 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'transparent',
     zIndex: 1000,
   },
   toggleButtonInner: {
@@ -130,7 +131,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
   },
   hideButton: {
     position: 'absolute',

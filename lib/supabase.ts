@@ -1,10 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
-import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import "react-native-url-polyfill/auto";
 
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl ?? "";
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey ?? "";
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 // Custom storage adapter for React Native using expo-secure-store
 const ExpoSecureStoreAdapter = {

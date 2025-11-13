@@ -11,19 +11,22 @@ export type ProjectPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 
 export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Completed';
+
 export interface Task {
-  id: number;
-  projectId: number;
+  id: string;
+  projectId: string;
   name: string;
   deadline?: string;
   priority: TaskPriority;
   assignee?: string;
+  status: TaskStatus;
   completed: boolean;
   createdAt: string;
 }
 
 export interface Project {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   status: ProjectStatus;
@@ -40,7 +43,18 @@ export interface Project {
 }
 
 export interface FavoriteProject {
-  id: number;
-  projectId: number;
+  id: string;
+  projectId: string;
+  createdAt: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  fileName: string;
+  filePath: string;
+  fileType?: string;
+  fileSize?: number;
+  uploadedBy?: string;
   createdAt: string;
 }

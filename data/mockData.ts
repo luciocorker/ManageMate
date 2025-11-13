@@ -1,31 +1,31 @@
 import { FavoriteProject, Project, Task } from '@/types/project';
 
 export const mockTasks: Task[] = [
-  { id: 1, projectId: 1, name: 'Design wireframes', deadline: '2025-11-15', priority: 'High', assignee: 'Alice', completed: true, createdAt: '2025-11-01' },
-  { id: 2, projectId: 1, name: 'Setup project repository', deadline: '2025-11-16', priority: 'High', assignee: 'Bob', completed: true, createdAt: '2025-11-01' },
-  { id: 3, projectId: 1, name: 'Implement authentication', deadline: '2025-11-20', priority: 'Critical', assignee: 'Charlie', completed: false, createdAt: '2025-11-01' },
-  { id: 4, projectId: 1, name: 'Create database schema', deadline: '2025-11-18', priority: 'High', assignee: 'Alice', completed: true, createdAt: '2025-11-02' },
-  { id: 5, projectId: 1, name: 'Build UI components', deadline: '2025-11-25', priority: 'Medium', assignee: 'Bob', completed: false, createdAt: '2025-11-02' },
+  { id: '1', projectId: '1', name: 'Design wireframes', deadline: '2025-11-15', priority: 'High', assignee: 'Alice', status: 'Completed', completed: true, createdAt: '2025-11-01' },
+  { id: '2', projectId: '1', name: 'Setup project repository', deadline: '2025-11-16', priority: 'High', assignee: 'Bob', status: 'Completed', completed: true, createdAt: '2025-11-01' },
+  { id: '3', projectId: '1', name: 'Implement authentication', deadline: '2025-11-20', priority: 'Critical', assignee: 'Charlie', status: 'In Progress', completed: false, createdAt: '2025-11-01' },
+  { id: '4', projectId: '1', name: 'Create database schema', deadline: '2025-11-18', priority: 'High', assignee: 'Alice', status: 'Completed', completed: true, createdAt: '2025-11-02' },
+  { id: '5', projectId: '1', name: 'Build UI components', deadline: '2025-11-25', priority: 'Medium', assignee: 'Bob', status: 'Not Started', completed: false, createdAt: '2025-11-02' },
   
-  { id: 6, projectId: 2, name: 'Research competitors', deadline: '2025-11-12', priority: 'Medium', assignee: 'Diana', completed: true, createdAt: '2025-11-03' },
-  { id: 7, projectId: 2, name: 'Create marketing plan', deadline: '2025-11-20', priority: 'High', assignee: 'Eve', completed: false, createdAt: '2025-11-03' },
-  { id: 8, projectId: 2, name: 'Design landing page', deadline: '2025-11-18', priority: 'High', assignee: 'Frank', completed: false, createdAt: '2025-11-04' },
+  { id: '6', projectId: '2', name: 'Research competitors', deadline: '2025-11-12', priority: 'Medium', assignee: 'Diana', status: 'Completed', completed: true, createdAt: '2025-11-03' },
+  { id: '7', projectId: '2', name: 'Create marketing plan', deadline: '2025-11-20', priority: 'High', assignee: 'Eve', status: 'In Progress', completed: false, createdAt: '2025-11-03' },
+  { id: '8', projectId: '2', name: 'Design landing page', deadline: '2025-11-18', priority: 'High', assignee: 'Frank', status: 'Not Started', completed: false, createdAt: '2025-11-04' },
   
-  { id: 9, projectId: 3, name: 'Fix login bug', deadline: '2025-11-11', priority: 'Critical', assignee: 'Grace', completed: true, createdAt: '2025-11-05' },
-  { id: 10, projectId: 3, name: 'Update dependencies', deadline: '2025-11-12', priority: 'Medium', assignee: 'Henry', completed: true, createdAt: '2025-11-05' },
-  { id: 11, projectId: 3, name: 'Performance optimization', deadline: '2025-11-15', priority: 'High', assignee: 'Grace', completed: false, createdAt: '2025-11-06' },
+  { id: '9', projectId: '3', name: 'Fix login bug', deadline: '2025-11-11', priority: 'Critical', assignee: 'Grace', status: 'Completed', completed: true, createdAt: '2025-11-05' },
+  { id: '10', projectId: '3', name: 'Update dependencies', deadline: '2025-11-12', priority: 'Medium', assignee: 'Henry', status: 'Completed', completed: true, createdAt: '2025-11-05' },
+  { id: '11', projectId: '3', name: 'Performance optimization', deadline: '2025-11-15', priority: 'High', assignee: 'Grace', status: 'In Progress', completed: false, createdAt: '2025-11-06' },
   
-  { id: 12, projectId: 4, name: 'Define project scope', deadline: '2025-11-14', priority: 'High', assignee: 'Ivan', completed: false, createdAt: '2025-11-07' },
-  { id: 13, projectId: 4, name: 'Create timeline', deadline: '2025-11-16', priority: 'Medium', assignee: 'Jane', completed: false, createdAt: '2025-11-07' },
+  { id: '12', projectId: '4', name: 'Define project scope', deadline: '2025-11-14', priority: 'High', assignee: 'Ivan', status: 'Not Started', completed: false, createdAt: '2025-11-07' },
+  { id: '13', projectId: '4', name: 'Create timeline', deadline: '2025-11-16', priority: 'Medium', assignee: 'Jane', status: 'Not Started', completed: false, createdAt: '2025-11-07' },
   
-  { id: 14, projectId: 5, name: 'Code review', deadline: '2025-11-13', priority: 'High', assignee: 'Kate', completed: true, createdAt: '2025-11-08' },
-  { id: 15, projectId: 5, name: 'Write documentation', deadline: '2025-11-14', priority: 'Medium', assignee: 'Leo', completed: true, createdAt: '2025-11-08' },
-  { id: 16, projectId: 5, name: 'Deploy to staging', deadline: '2025-11-15', priority: 'High', assignee: 'Kate', completed: false, createdAt: '2025-11-09' },
+  { id: '14', projectId: '5', name: 'Code review', deadline: '2025-11-13', priority: 'High', assignee: 'Kate', status: 'Completed', completed: true, createdAt: '2025-11-08' },
+  { id: '15', projectId: '5', name: 'Write documentation', deadline: '2025-11-14', priority: 'Medium', assignee: 'Leo', status: 'Completed', completed: true, createdAt: '2025-11-08' },
+  { id: '16', projectId: '5', name: 'Deploy to staging', deadline: '2025-11-15', priority: 'High', assignee: 'Kate', status: 'In Progress', completed: false, createdAt: '2025-11-09' },
 ];
 
 export const mockProjects: Project[] = [
   {
-    id: 1,
+    id: '1',
     name: 'E-Commerce Platform',
     description: 'Building a modern e-commerce platform with React and Node.js',
     status: 'In Progress',
@@ -39,7 +39,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-10',
   },
   {
-    id: 2,
+    id: '2',
     name: 'Marketing Campaign',
     description: 'Q4 marketing campaign for product launch',
     status: 'Planning',
@@ -53,7 +53,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-09',
   },
   {
-    id: 3,
+    id: '3',
     name: 'Bug Fixes Sprint',
     description: 'Critical bug fixes and performance improvements',
     status: 'Review',
@@ -67,7 +67,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-10',
   },
   {
-    id: 4,
+    id: '4',
     name: 'Mobile App Development',
     description: 'Native mobile app for iOS and Android',
     status: 'Planning',
@@ -81,7 +81,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-09',
   },
   {
-    id: 5,
+    id: '5',
     name: 'API Integration',
     description: 'Integrate third-party APIs for payment and analytics',
     status: 'Testing',
@@ -95,7 +95,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-10',
   },
   {
-    id: 6,
+    id: '6',
     name: 'Database Migration',
     description: 'Migrate from MongoDB to PostgreSQL',
     status: 'Completed',
@@ -109,7 +109,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-05',
   },
   {
-    id: 7,
+    id: '7',
     name: 'Customer Portal',
     description: 'Self-service customer portal with ticket system',
     status: 'Paused',
@@ -123,7 +123,7 @@ export const mockProjects: Project[] = [
     updatedAt: '2025-11-01',
   },
   {
-    id: 8,
+    id: '8',
     name: 'Old Website Redesign',
     description: 'Complete redesign of legacy website',
     status: 'Archived',
@@ -139,9 +139,9 @@ export const mockProjects: Project[] = [
 ];
 
 export const mockFavorites: FavoriteProject[] = [
-  { id: 1, projectId: 1, createdAt: '2025-11-05' },
-  { id: 2, projectId: 3, createdAt: '2025-11-06' },
-  { id: 3, projectId: 5, createdAt: '2025-11-09' },
+  { id: '1', projectId: '1', createdAt: '2025-11-05' },
+  { id: '2', projectId: '3', createdAt: '2025-11-06' },
+  { id: '3', projectId: '5', createdAt: '2025-11-09' },
 ];
 
 // Helper function to get projects with tasks

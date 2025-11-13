@@ -1,3 +1,4 @@
+import { DatePickerModal } from '@/components/date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -30,6 +31,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
   const [budget, setBudget] = useState('');
   const [teamMember, setTeamMember] = useState('');
   const [team, setTeam] = useState<string[]>([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const statuses: ProjectStatus[] = ['Planning', 'In Progress', 'Review', 'Testing', 'Completed', 'Paused', 'Archived'];
   const priorities: ProjectPriority[] = ['Low', 'Medium', 'High', 'Critical'];
@@ -154,14 +156,27 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
 
             {/* Deadline */}
             <View style={styles.field}>
-              <ThemedText style={styles.label}>Deadline (YYYY-MM-DD)</ThemedText>
-              <TextInput
-                style={styles.input}
-                placeholder="2025-12-31"
-                placeholderTextColor="#999"
-                value={deadline}
-                onChangeText={setDeadline}
-              />
+              <ThemedText style={styles.label}>Deadline</ThemedText>
+              <TouchableOpacity 
+                style={styles.datePickerButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <IconSymbol name="calendar" size={20} color="#999" />
+                <ThemedText style={styles.datePickerText}>
+                  {deadline || 'Select Deadline'}
+                </ThemedText>
+                {deadline && (
+                  <TouchableOpacity 
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setDeadline('');
+                    }}
+                    style={styles.clearDateButton}
+                  >
+                    <IconSymbol name="xmark" size={16} color="#999" />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
             </View>
 
             {/* Budget */}
@@ -217,6 +232,14 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
           </View>
         </ThemedView>
       </View>
+      
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        visible={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        onSelectDate={(date) => setDeadline(date)}
+        selectedDate={deadline}
+      />
     </Modal>
   );
 }
@@ -268,6 +291,24 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: 'white',
+  },
+  datePickerButton: {
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  datePickerText: {
+    fontSize: 16,
+    color: '#999',
+    flex: 1,
+  },
+  clearDateButton: {
+    padding: 4,
   },
   textArea: {
     height: 100,
