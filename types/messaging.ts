@@ -17,6 +17,7 @@ export interface Friend {
 export interface Channel {
   id: string;
   name: string;
+  description?: string;
   members: number;
   memberNames?: string[];
 }

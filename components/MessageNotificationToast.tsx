@@ -82,13 +82,16 @@ export default function MessageNotificationToast() {
     return null;
   }
 
-  const { senderName, messageText } = currentNotification;
+  const { senderName, messageText, count = 1 } = currentNotification;
 
   // Truncate message if too long
   const displayMessage =
     messageText.length > 80
       ? `${messageText.substring(0, 80)}...`
       : messageText;
+
+  // Show count if multiple messages
+  const displaySender = count > 1 ? `${senderName} (${count})` : senderName;
 
   return (
     <Animated.View
@@ -112,9 +115,9 @@ export default function MessageNotificationToast() {
         </View>
 
         <View style={styles.textContainer}>
-          <Text style={styles.senderName}>{senderName}</Text>
+          <Text style={styles.senderName}>{displaySender}</Text>
           <Text style={styles.messageText} numberOfLines={2}>
-            {displayMessage}
+            {count > 1 ? `${count} new messages` : displayMessage}
           </Text>
         </View>
 

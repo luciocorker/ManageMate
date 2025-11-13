@@ -1,10 +1,12 @@
 import AddMembersModal from "@/components/AddMembersModal";
+import EditChannelModal from "@/components/EditChannelModal";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   addChannelMembers,
   deleteChannel,
   getChannelMembers,
   getFriends,
+  updateChannel,
 } from "@/supabase/supabaseClient";
 import type { Channel, Friend } from "@/types/messaging";
 import { useEffect, useState } from "react";
@@ -80,8 +82,13 @@ export default function ChannelDetail({
   const { user } = useAuth();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [showEditChannelModal, setShowEditChannelModal] = useState(false);
   const [channelMembers, setChannelMembers] = useState<string[]>(
     channel.memberNames || []
+  );
+  const [channelName, setChannelName] = useState(channel.name);
+  const [channelDescription, setChannelDescription] = useState(
+    channel.description || ""
   );
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
 
@@ -147,6 +154,28 @@ export default function ChannelDetail({
     return avatarColors[index];
   }
 
+  async function handleEditChannel(
+    name: string,
+    description: string
+  ): Promise<boolean> {
+    try {
+      const success = await updateChannel(channel.id, { name, description });
+
+      if (success) {
+        // Update local state
+        setChannelName(name);
+        setChannelDescription(description);
+        // Notify parent to refresh
+        onMembersUpdated?.();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error editing channel:", error);
+      return false;
+    }
+  }
+
   function handleDeleteChannel() {
     // Show confirmation dialog
     Alert.alert(
@@ -193,7 +222,7 @@ export default function ChannelDetail({
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <BackIcon />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{channel.name}</Text>
+        <Text style={styles.headerTitle}>{channelName}</Text>
       </View>
 
       <ScrollView style={styles.content}>
@@ -202,7 +231,10 @@ export default function ChannelDetail({
           <View style={styles.channelIcon}>
             <UsersIcon />
           </View>
-          <Text style={styles.channelName}>{channel.name}</Text>
+          <Text style={styles.channelName}>{channelName}</Text>
+          {channelDescription ? (
+            <Text style={styles.channelDescription}>{channelDescription}</Text>
+          ) : null}
           <Text style={styles.memberCount}>
             {channelMembers.length} members
           </Text>
@@ -248,6 +280,13 @@ export default function ChannelDetail({
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => setShowEditChannelModal(true)}
+          >
+            <Text style={styles.editButtonText}>Edit Channel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.deleteButton}
             onPress={handleDeleteChannel}
           >
@@ -263,7 +302,16 @@ export default function ChannelDetail({
         onAddMembers={handleAddMembers}
         friends={friends}
         existingMembers={channelMembers}
-        channelName={channel.name}
+        channelName={channelName}
+      />
+
+      {/* Edit Channel Modal */}
+      <EditChannelModal
+        visible={showEditChannelModal}
+        onClose={() => setShowEditChannelModal(false)}
+        channelName={channelName}
+        channelDescription={channelDescription}
+        onSave={handleEditChannel}
       />
     </View>
   );
@@ -317,6 +365,13 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "white",
     marginBottom: 8,
+  },
+  channelDescription: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 8,
+    paddingHorizontal: 20,
   },
   memberCount: {
     fontSize: 16,
@@ -387,6 +442,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  editButton: {
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4ECDC4",
+    marginBottom: 12,
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4ECDC4",
   },
   deleteButton: {
     backgroundColor: "#1e1e1e",

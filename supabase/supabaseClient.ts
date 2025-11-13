@@ -61,6 +61,32 @@ export async function getChannels(): Promise<Channel[]> {
 }
 
 /**
+ * Update a channel's name and/or description
+ */
+export async function updateChannel(
+  channelId: string,
+  updates: { name?: string; description?: string }
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("channels")
+      .update(updates)
+      .eq("id", channelId);
+
+    if (error) {
+      console.error("Error updating channel:", error);
+      return false;
+    }
+
+    console.log(`Channel ${channelId} updated successfully`);
+    return true;
+  } catch (error) {
+    console.error("Unexpected error updating channel:", error);
+    return false;
+  }
+}
+
+/**
  * Delete a channel and all associated data
  * This will cascade delete channel members and messages due to database constraints
  */

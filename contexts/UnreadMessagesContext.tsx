@@ -64,6 +64,7 @@ interface UnreadMessagesContextType {
     conversationId: string;
     messageText: string;
     senderName: string;
+    count?: number;
   } | null;
 
   // Dismiss current notification
@@ -90,6 +91,7 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
     conversationId: string;
     messageText: string;
     senderName: string;
+    count?: number;
   } | null>(null);
   const [isOnMessengerPage, setIsOnMessengerPage] = useState(false);
 
@@ -228,10 +230,14 @@ export function UnreadMessagesProvider({ children }: { children: ReactNode }) {
     messageText: string,
     senderName: string
   ) {
+    // Get current count for this conversation
+    const count = unreadCounts[conversationId]?.count || 1;
+
     setCurrentNotification({
       conversationId,
       messageText,
       senderName,
+      count,
     });
 
     // Auto-dismiss notification after 5 seconds
