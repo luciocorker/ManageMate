@@ -208,16 +208,16 @@ export default function MessagingPage() {
           // Get last message with this friend
           const messages = await getDirectMessages(
             currentUser.name,
-            f.friend_name
+            f.friend_id
           );
           const lastMessage =
             messages.length > 0 ? messages[messages.length - 1] : null;
 
           return {
             id: f.id,
-            name: f.friend_name,
-            message: lastMessage ? lastMessage.text : "No messages yet",
-            avatar: getAvatarColor(f.friend_name),
+            name: f.friend_id,
+            message: lastMessage ? lastMessage.content : "No messages yet",
+            avatar: getAvatarColor(f.friend_id),
             online: Math.random() > 0.5, // Random for now, add real status later
           };
         })

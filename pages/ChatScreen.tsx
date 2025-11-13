@@ -257,9 +257,9 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
       // Transform Supabase messages to display format
       const displayMessages: Message[] = messagesData.map((msg) => ({
         id: msg.id,
-        text: msg.text,
-        sender: msg.sender_name === user.name ? "me" : "them",
-        senderName: msg.sender_name,
+        text: msg.content,
+        sender: msg.sender_id === user.id ? "me" : "them",
+        senderName: msg.sender_id,
         timestamp: new Date(msg.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
@@ -296,8 +296,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           // No need to manually emit - the INSERT trigger handles it
           realtime.sendMessage(roomId, {
             id: savedMessage.id,
-            text: savedMessage.text,
-            sender_name: savedMessage.sender_name,
+            text: savedMessage.content,
+            sender_name: savedMessage.sender_id,
             created_at: savedMessage.created_at,
             roomId: roomId,
           });
@@ -305,9 +305,9 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           // Add message to local state (will also be received via Supabase Realtime)
           const newMessage: Message = {
             id: savedMessage.id,
-            text: savedMessage.text,
+            text: savedMessage.content,
             sender: "me",
-            senderName: savedMessage.sender_name,
+            senderName: savedMessage.sender_id,
             timestamp: new Date(savedMessage.created_at).toLocaleTimeString(
               [],
               {

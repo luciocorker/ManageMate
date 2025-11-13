@@ -1,161 +1,173 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
+import type { User as FirebaseUser } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 // ==========================================
-// 🚧 PLACEHOLDER AUTH CONTEXT 🚧
+// FIREBASE AUTH CONTEXT
 // ==========================================
-// This is a placeholder auth system that stores user data locally.
-// When Supabase Auth is implemented, replace this with:
-// - supabase.auth.signUp()
-// - supabase.auth.signInWithPassword()
-// - supabase.auth.signOut()
-// - supabase.auth.onAuthStateChange()
+// This context integrates Firebase Authentication with Supabase database
+// - Firebase handles user authentication (signin/signup/signout)
+// - Supabase stores user profiles and messaging data
+// - Firebase UID is used as the foreign key across all Supabase tables
 // ==========================================
 
 export interface User {
-  id: string;
+  id: string; // Firebase UID
   email: string;
   name: string;
+  emailVerified: boolean;
+  photoURL?: string;
   created_at: string;
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string, name?: string) => Promise<boolean>;
-  signUp: (email: string, password: string, name: string) => Promise<boolean>;
+  firebaseUser: FirebaseUser | null;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = "@managemate_auth_user";
-const USERS_STORAGE_KEY = "@managemate_users"; // Mock user database
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user from storage on mount
+  // Listen to Firebase auth state changes
   useEffect(() => {
-    loadUser();
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (firebaseUser: FirebaseUser | null) => {
+        if (firebaseUser) {
+          // User is signed in
+          console.log("✅ Firebase user authenticated:", firebaseUser.email);
+
+          // Fetch or sync user data from Supabase
+          await syncUserWithSupabase(firebaseUser);
+          setFirebaseUser(firebaseUser);
+        } else {
+          // User is signed out
+          console.log("🔓 User signed out");
+          setUser(null);
+          setFirebaseUser(null);
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
-  async function loadUser() {
+  // Sync Firebase user with Supabase users table
+  async function syncUserWithSupabase(firebaseUser: FirebaseUser) {
     try {
-      const userData = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-      if (userData) {
-        setUser(JSON.parse(userData));
+      // Check if user exists in Supabase
+      const { data: existingUser, error: fetchError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("firebase_uid", firebaseUser.uid)
+        .single();
+
+      if (fetchError && fetchError.code !== "PGRST116") {
+        // PGRST116 means no rows found, which is ok
+        console.error("Error fetching user from Supabase:", fetchError);
       }
-    } catch (error) {
-      console.error("Error loading user:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  // 🚧 PLACEHOLDER: Sign in function
-  // TODO: Replace with Supabase Auth
-  // const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  async function signIn(
-    email: string,
-    password: string,
-    name?: string
-  ): Promise<boolean> {
-    try {
-      // Get mock users from storage
-      const usersData = await AsyncStorage.getItem(USERS_STORAGE_KEY);
-      const users: User[] = usersData ? JSON.parse(usersData) : [];
+      if (!existingUser) {
+        // User doesn't exist in Supabase, create them
+        const { data: newUser, error: insertError } = await supabase
+          .from("users")
+          .insert([
+            {
+              firebase_uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              full_name: firebaseUser.displayName || "",
+              email_verified: firebaseUser.emailVerified,
+              profile_picture_url: firebaseUser.photoURL,
+              created_at: new Date().toISOString(),
+            },
+          ])
+          .select()
+          .single();
 
-      // Find user by email
-      const existingUser = users.find((u) => u.email === email);
+        if (insertError) {
+          console.error("Error creating user in Supabase:", insertError);
+          return;
+        }
 
-      if (existingUser) {
-        // User exists, sign them in
-        await AsyncStorage.setItem(
-          AUTH_STORAGE_KEY,
-          JSON.stringify(existingUser)
-        );
-        setUser(existingUser);
-        console.log("✅ User signed in (placeholder):", existingUser.email);
-        return true;
-      } else if (name) {
-        // Auto-register if name is provided (for friend request flow)
-        return await signUp(email, password, name);
+        console.log("✅ User created in Supabase:", newUser);
+
+        // Set user state
+        setUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email || "",
+          name: firebaseUser.displayName || "",
+          emailVerified: firebaseUser.emailVerified,
+          photoURL: firebaseUser.photoURL || undefined,
+          created_at: newUser.created_at,
+        });
       } else {
-        console.error("❌ User not found");
-        return false;
+        // User exists, update their info if needed
+        const { error: updateError } = await supabase
+          .from("users")
+          .update({
+            email: firebaseUser.email,
+            full_name: firebaseUser.displayName || existingUser.full_name,
+            email_verified: firebaseUser.emailVerified,
+            profile_picture_url: firebaseUser.photoURL,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("firebase_uid", firebaseUser.uid);
+
+        if (updateError) {
+          console.warn("Error updating user in Supabase:", updateError);
+        }
+
+        // Set user state
+        setUser({
+          id: firebaseUser.uid,
+          email: firebaseUser.email || "",
+          name: firebaseUser.displayName || existingUser.full_name,
+          emailVerified: firebaseUser.emailVerified,
+          photoURL: firebaseUser.photoURL || existingUser.profile_picture_url,
+          created_at: existingUser.created_at,
+        });
       }
     } catch (error) {
-      console.error("Error signing in:", error);
-      return false;
+      console.error("Error syncing user with Supabase:", error);
     }
   }
 
-  // 🚧 PLACEHOLDER: Sign up function
-  // TODO: Replace with Supabase Auth
-  // const { data, error } = await supabase.auth.signUp({ email, password })
-  async function signUp(
-    email: string,
-    password: string,
-    name: string
-  ): Promise<boolean> {
-    try {
-      // Get existing users
-      const usersData = await AsyncStorage.getItem(USERS_STORAGE_KEY);
-      const users: User[] = usersData ? JSON.parse(usersData) : [];
-
-      // Check if user already exists
-      if (users.find((u) => u.email === email)) {
-        console.error("❌ User already exists");
-        return false;
-      }
-
-      // Create new user
-      const newUser: User = {
-        id: `user_${Date.now()}`,
-        email,
-        name,
-        created_at: new Date().toISOString(),
-      };
-
-      // Save to mock database
-      users.push(newUser);
-      await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-
-      // Sign in the new user
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
-      setUser(newUser);
-
-      console.log("✅ User signed up (placeholder):", newUser.email);
-      return true;
-    } catch (error) {
-      console.error("Error signing up:", error);
-      return false;
+  // Refresh user data from Supabase
+  async function refreshUser() {
+    if (firebaseUser) {
+      await syncUserWithSupabase(firebaseUser);
     }
   }
 
-  // 🚧 PLACEHOLDER: Sign out function
-  // TODO: Replace with Supabase Auth
-  // await supabase.auth.signOut()
+  // Sign out
   async function signOut() {
     try {
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-      setUser(null);
-      console.log("✅ User signed out (placeholder)");
+      await auth.signOut();
+      console.log("✅ User signed out");
     } catch (error) {
       console.error("Error signing out:", error);
+      throw error;
     }
   }
 
   const value: AuthContextType = {
     user,
     loading,
-    signIn,
-    signUp,
+    firebaseUser,
     signOut,
-    isAuthenticated: user !== null,
+    isAuthenticated: user !== null && user.emailVerified,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

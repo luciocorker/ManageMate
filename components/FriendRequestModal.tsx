@@ -27,7 +27,8 @@ interface FriendRequestModalProps {
   visible: boolean;
   onClose: () => void;
   requestId: string;
-  senderName: string;
+  senderName?: string;
+  senderEmail?: string;
   onAccept?: () => void;
   onDecline?: () => void;
 }
@@ -37,6 +38,7 @@ export default function FriendRequestModal({
   onClose,
   requestId,
   senderName,
+  senderEmail,
   onAccept,
   onDecline,
 }: FriendRequestModalProps) {
@@ -51,7 +53,7 @@ export default function FriendRequestModal({
 
     setLoading(true);
     try {
-      const success = await acceptFriendRequest(requestId, user.name);
+      const success = await acceptFriendRequest(requestId, user.id);
 
       if (success) {
         Alert.alert(

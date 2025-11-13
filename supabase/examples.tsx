@@ -201,13 +201,13 @@ function ChatWithRealtime({ channelId }: { channelId: string }) {
 function formatMessageForDisplay(message: Message) {
   return {
     id: message.id,
-    text: message.text,
-    sender: message.sender_name,
+    text: message.content,
+    sender: message.sender_id,
     timestamp: new Date(message.created_at).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
     }),
-    isCurrentUser: message.sender_name === "Lee", // Replace with actual current user
+    isCurrentUser: message.sender_id === "Lee", // Replace with actual current user
   };
 }
 
@@ -218,7 +218,7 @@ function formatMessageForDisplay(message: Message) {
 function formatFriendForDisplay(friend: Friend) {
   return {
     id: friend.id,
-    name: friend.friend_name,
+    name: friend.friend_id,
     // Add avatar logic, online status, etc.
   };
 }

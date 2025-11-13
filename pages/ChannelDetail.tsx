@@ -104,9 +104,9 @@ export default function ChannelDetail({
       const friendsData = await getFriends(user.name);
       const displayFriends: Friend[] = friendsData.map((f) => ({
         id: f.id,
-        name: f.friend_name,
+        name: f.friend_id,
         message: "",
-        avatar: getAvatarColor(f.friend_name),
+        avatar: getAvatarColor(f.friend_id),
         online: Math.random() > 0.5,
       }));
       setFriends(displayFriends);

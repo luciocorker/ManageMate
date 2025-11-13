@@ -346,9 +346,8 @@ export async function sendFriendRequest(
       .from("friend_requests")
       .insert([
         {
-          sender_name: input.sender_name,
-          sender_email: input.sender_email,
-          receiver_name: input.receiver_name,
+          sender_id: input.sender_id,
+          receiver_id: input.receiver_email,
           receiver_email: input.receiver_email,
           status: "pending",
         },
