@@ -99,7 +99,7 @@ export default {
       googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
       eas: {
-        projectId: "e002ff13-e314-4d50-82fe-3c0688d95a46",
+        projectId: "933a849e-a941-4a11-9a7a-f8e37408b606",
       },
     },
   },
