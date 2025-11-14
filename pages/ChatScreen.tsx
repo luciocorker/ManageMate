@@ -127,11 +127,13 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
         (newMessage.sender_id === currentUserId && newMessage.receiver_id === friend.id)
       ) {
         setMessages((prev) => {
-          // Check if message already exists
+          // Check if message already exists (by real ID)
           if (prev.find((m) => m.id === newMessage.id)) {
             return prev;
           }
-          return [...prev, newMessage];
+          // Remove temp messages (will be replaced by real ones from DB)
+          const withoutTemp = prev.filter((m) => !m.id.startsWith('temp-'));
+          return [...withoutTemp, newMessage];
         });
         
         // Scroll to bottom when new message arrives

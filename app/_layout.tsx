@@ -22,8 +22,13 @@ export default function RootLayout() {
     // Register for push notifications
     registerForPushNotificationsAsync().then(token => {
       if (token) {
+        console.log('Push token registered:', token);
         savePushToken(token);
+      } else {
+        console.log('Failed to get push token');
       }
+    }).catch(error => {
+      console.error('Error registering for push notifications:', error);
     });
 
     // Setup notification listeners
