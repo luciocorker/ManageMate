@@ -1,2 +1,0 @@
-# Install Expo Notifications
-npm install expo-notifications expo-device expo-constants
