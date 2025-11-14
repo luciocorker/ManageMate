@@ -69,12 +69,23 @@ const formatTimestamp = (timestamp: string) => {
 };
 
 export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
-  const { refreshUnreadCount } = useMessaging();
+  const { refreshUnreadCount, setIsInChatScreen } = useMessaging();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  // Set chat screen flag
+  useEffect(() => {
+    console.log('ChatScreen mounted - setting isInChatScreen to true');
+    setIsInChatScreen(true);
+    return () => {
+      console.log('ChatScreen unmounted - setting isInChatScreen to false');
+      setIsInChatScreen(false);
+    };
+  }, [setIsInChatScreen]);
 
   // Get current user ID
   useEffect(() => {
@@ -167,11 +178,12 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -240,12 +252,15 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
       {/* Input */}
       <View style={styles.inputContainer}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder="Type a message..."
           placeholderTextColor="#666"
           value={inputText}
           onChangeText={setInputText}
           multiline
+          maxLength={1000}
+          blurOnSubmit={false}
         />
         <TouchableOpacity
           style={styles.sendButton}
@@ -255,7 +270,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           <SendIcon />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -379,8 +395,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingBottom: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: "#121212",
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",

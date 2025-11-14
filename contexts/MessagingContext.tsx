@@ -5,6 +5,8 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 interface MessagingContextType {
   unreadCount: number;
   refreshUnreadCount: () => Promise<void>;
+  isInChatScreen: boolean;
+  setIsInChatScreen: (value: boolean) => void;
 }
 
 const MessagingContext = createContext<MessagingContextType | undefined>(undefined);
@@ -12,6 +14,7 @@ const MessagingContext = createContext<MessagingContextType | undefined>(undefin
 export function MessagingProvider({ children }: { children: ReactNode }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isInChatScreen, setIsInChatScreen] = useState(false);
 
   // Get current user and initial unread count
   useEffect(() => {
@@ -73,7 +76,7 @@ export function MessagingProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <MessagingContext.Provider value={{ unreadCount, refreshUnreadCount }}>
+    <MessagingContext.Provider value={{ unreadCount, refreshUnreadCount, isInChatScreen, setIsInChatScreen }}>
       {children}
     </MessagingContext.Provider>
   );

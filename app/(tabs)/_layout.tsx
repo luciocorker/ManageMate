@@ -12,7 +12,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [isNavbarVisible, setIsNavbarVisible] = useState(true);
-  const { unreadCount } = useMessaging();
+  const { unreadCount, isInChatScreen } = useMessaging();
 
   const toggleNavbar = () => {
     setIsNavbarVisible(!isNavbarVisible);
@@ -26,7 +26,7 @@ export default function TabLayout() {
           headerShown: false,
           tabBarButton: HapticTab,
           tabBarShowLabel: false,
-          tabBarStyle: isNavbarVisible ? undefined : { display: 'none' },
+          tabBarStyle: (isInChatScreen || isNavbarVisible) ? undefined : { display: 'none' },
         }}>
       <Tabs.Screen
         name="dashboard"
@@ -91,7 +91,7 @@ export default function TabLayout() {
       />
     </Tabs>
     
-    {!isNavbarVisible && (
+    {!isInChatScreen && !isNavbarVisible && (
       <TouchableOpacity 
         style={styles.toggleButton} 
         onPress={toggleNavbar}
@@ -112,7 +112,7 @@ export default function TabLayout() {
       </TouchableOpacity>
     )}
     
-    {isNavbarVisible && (
+    {!isInChatScreen && isNavbarVisible && (
       <TouchableOpacity 
         style={styles.hideButton} 
         onPress={toggleNavbar}
