@@ -1,29 +1,18 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
-import {
-  signInWithApple,
-  signInWithGithub,
-  signInWithGoogle,
-} from "@/lib/socialAuth";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import {
-  createUserWithEmailAndPassword,
-  sendEmailVerification,
-  updateProfile,
-} from "firebase/auth";
 import { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function SignUpScreen() {
@@ -54,48 +43,37 @@ export default function SignUpScreen() {
     setLoading(true);
 
     try {
-      // Create user in Firebase
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
+      // Sign up with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
         email,
-        password
-      );
-      const user = userCredential.user;
-
-      // Update Firebase profile with display name
-      await updateProfile(user, {
-        displayName: name,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: 'managemate://auth/callback',
+        },
       });
 
-      // Send email verification with action code settings for mobile deep linking
-      const actionCodeSettings = {
-        url: "https://managemate-32f1d.firebaseapp.com/?email=" + user.email,
-        iOS: {
-          bundleId: "com.managemate.app",
-        },
-        android: {
-          packageName: "com.managemate.app",
-          installApp: true,
-          minimumVersion: "1",
-        },
-        handleCodeInApp: true,
-      };
+      if (error) throw error;
 
-      await sendEmailVerification(user, actionCodeSettings);
+      if (data.user) {
+        // Create profile explicitly (in case trigger didn't work)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: data.user.email!,
+            full_name: name,
+          });
 
-      // Store user info in Supabase
-      const { error: supabaseError } = await supabase.from("users").insert([
-        {
-          firebase_uid: user.uid,
-          email: user.email,
-          full_name: name,
-          email_verified: false,
-          created_at: new Date().toISOString(),
-        },
-      ]);
-
-      if (supabaseError) {
-        console.warn("Supabase storage error:", supabaseError);
+        if (profileError) {
+          // If profile already exists (trigger worked), that's fine
+          if (!profileError.message?.includes('duplicate') && !profileError.message?.includes('already exists')) {
+            console.error('Profile creation error:', profileError);
+            throw new Error('Failed to create profile. Please contact support.');
+          }
+        }
       }
 
       setLoading(false);
@@ -109,11 +87,11 @@ export default function SignUpScreen() {
       setLoading(false);
       let errorMessage = "An error occurred during sign up";
 
-      if (error.code === "auth/email-already-in-use") {
+      if (error.message?.includes("already registered")) {
         errorMessage = "This email is already registered";
-      } else if (error.code === "auth/invalid-email") {
+      } else if (error.message?.includes("invalid email")) {
         errorMessage = "Invalid email address";
-      } else if (error.code === "auth/weak-password") {
+      } else if (error.message?.includes("weak password")) {
         errorMessage = "Password is too weak";
       } else if (error.message) {
         errorMessage = error.message;
@@ -124,39 +102,15 @@ export default function SignUpScreen() {
   };
 
   const handleGoogleSignUp = async () => {
-    setLoading(true);
-    const result = await signInWithGoogle();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else {
-      Alert.alert("Google Sign Up Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "Google Sign Up with Supabase will be available soon");
   };
 
   const handleAppleSignUp = async () => {
-    setLoading(true);
-    const result = await signInWithApple();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else if (result.error !== "Sign in was canceled") {
-      Alert.alert("Apple Sign Up Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "Apple Sign Up with Supabase will be available soon");
   };
 
   const handleGithubSignUp = async () => {
-    setLoading(true);
-    const result = await signInWithGithub();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else {
-      Alert.alert("GitHub Sign Up Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "GitHub Sign Up with Supabase will be available soon");
   };
 
   return (

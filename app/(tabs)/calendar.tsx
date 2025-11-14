@@ -1,5 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useTheme } from '@/contexts/ThemeContext';
+import { supabase } from '@/lib/supabase';
 import { getProjectsWithTasks } from '@/lib/supabaseService';
 import { Project, Task } from '@/types/project';
 import { useRouter } from 'expo-router';
@@ -38,34 +40,59 @@ const getStatusTextStyle = (status: string) => {
 
 export default function CalendarScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   
-  // Load projects from Supabase
+  // Load projects and user info from Supabase
   useEffect(() => {
-    loadProjects();
+    loadData();
   }, []);
 
-  const loadProjects = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        
+        // Get user profile for name
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.full_name) {
+          setCurrentUserName(profile.full_name);
+        }
+      }
+      
+      // Get all projects (owned + member)
       const data = await getProjectsWithTasks();
       setProjects(data);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
   };
   
   // Get all tasks with deadlines and projects with deadlines
+  // Filter: Show all tasks from owned projects, only assigned tasks from member projects
   const dueDates = useMemo(() => {
     const dates: { [key: string]: { tasks: Task[], projects: Project[] } } = {};
     
     projects.forEach(project => {
-      // Add project deadline
+      const isOwner = project.ownerId === currentUserId;
+      
+      // Add project deadline (all projects shown)
       if (project.deadline) {
         const dateKey = project.deadline;
         if (!dates[dateKey]) {
@@ -77,17 +104,23 @@ export default function CalendarScreen() {
       // Add task deadlines
       project.tasks?.forEach(task => {
         if (task.deadline) {
-          const dateKey = task.deadline;
-          if (!dates[dateKey]) {
-            dates[dateKey] = { tasks: [], projects: [] };
+          // If owner: show all tasks
+          // If member: show only tasks assigned to them
+          const shouldShowTask = isOwner || task.assignee === currentUserName;
+          
+          if (shouldShowTask) {
+            const dateKey = task.deadline;
+            if (!dates[dateKey]) {
+              dates[dateKey] = { tasks: [], projects: [] };
+            }
+            dates[dateKey].tasks.push(task);
           }
-          dates[dateKey].tasks.push(task);
         }
       });
     });
     
     return dates;
-  }, [projects]);
+  }, [projects, currentUserId, currentUserName]);
   
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -204,6 +237,8 @@ export default function CalendarScreen() {
     return days;
   };
 
+  const styles = createStyles(colors);
+
   // Show loading state
   if (loading) {
     return (
@@ -212,7 +247,7 @@ export default function CalendarScreen() {
           <ThemedText style={styles.title}>Calendar</ThemedText>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <ThemedText style={styles.loadingText}>Loading calendar...</ThemedText>
         </View>
       </View>
@@ -230,7 +265,7 @@ export default function CalendarScreen() {
         <View style={styles.calendarContainer}>
           <View style={styles.monthHeader}>
             <TouchableOpacity onPress={goToPreviousMonth} style={styles.navButton}>
-              <IconSymbol name="chevron.left" size={24} color="#fff" />
+              <IconSymbol name="chevron.left" size={24} color={colors.text} />
             </TouchableOpacity>
             
             <ThemedText style={styles.monthYear}>
@@ -238,7 +273,7 @@ export default function CalendarScreen() {
             </ThemedText>
             
             <TouchableOpacity onPress={goToNextMonth} style={styles.navButton}>
-              <IconSymbol name="chevron.right" size={24} color="#fff" />
+              <IconSymbol name="chevron.right" size={24} color={colors.text} />
             </TouchableOpacity>
           </View>
           
@@ -289,7 +324,7 @@ export default function CalendarScreen() {
                           onPress={() => router.push(`/(tabs)/project/${project.id}`)}
                         >
                           <View style={styles.projectIconContainer}>
-                            <IconSymbol name="folder" size={20} color="#DC2626" />
+                            <IconSymbol name="folder" size={20} color={colors.primary} />
                           </View>
                           <View style={styles.eventContent}>
                             <View style={styles.eventTitleRow}>
@@ -304,7 +339,7 @@ export default function CalendarScreen() {
                               {project.priority} Priority
                             </ThemedText>
                           </View>
-                          <IconSymbol name="chevron.right" size={20} color="#999" />
+                          <IconSymbol name="chevron.right" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -320,7 +355,7 @@ export default function CalendarScreen() {
                           onPress={() => router.push(`/(tabs)/project/${task.projectId}`)}
                         >
                           <View style={styles.taskIconContainer}>
-                            <IconSymbol name="checkmark.circle" size={20} color="#999" />
+                            <IconSymbol name="checkmark.circle" size={20} color={colors.textSecondary} />
                           </View>
                           <View style={styles.eventContent}>
                             <View style={styles.eventTitleRow}>
@@ -333,10 +368,10 @@ export default function CalendarScreen() {
                             </View>
                             <ThemedText style={styles.eventSubtitle}>
                               {task.priority} Priority
-                              {task.assignee && ` • Assigned to: ${task.assignee}`}
+                              {task.assignee && ` • Assigned to: ${task.assignee === currentUserName ? 'you' : task.assignee}`}
                             </ThemedText>
                           </View>
-                          <IconSymbol name="chevron.right" size={20} color="#999" />
+                          <IconSymbol name="chevron.right" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -357,34 +392,34 @@ export default function CalendarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
   },
   header: {
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.text,
   },
   scrollView: {
     flex: 1,
   },
   calendarContainer: {
     margin: 16,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
   },
   monthHeader: {
     flexDirection: 'row',
@@ -399,19 +434,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.border,
   },
   monthYear: {
     fontSize: 18,
     fontWeight: '600',
-    color: 'white',
+    color: colors.text,
   },
   daysOfWeekContainer: {
     flexDirection: 'row',
     marginBottom: 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
   dayOfWeekCell: {
     flex: 1,
@@ -420,7 +455,7 @@ const styles = StyleSheet.create({
   dayOfWeekText: {
     fontWeight: '600',
     fontSize: 12,
-    color: '#999',
+    color: colors.textSecondary,
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -436,25 +471,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.border,
     position: 'relative',
   },
   todayContent: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     borderWidth: 2,
-    borderColor: '#DC2626',
+    borderColor: colors.primary,
   },
   selectedContent: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.border,
     borderWidth: 2,
-    borderColor: '#DC2626',
+    borderColor: colors.primary,
   },
   dayText: {
     fontSize: 14,
-    color: 'white',
+    color: colors.text,
   },
   activeDayText: {
-    color: '#fff',
+    color: colors.card,
     fontWeight: 'bold',
   },
   dueIndicatorContainer: {
@@ -472,18 +507,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#121212',
+    borderColor: colors.background,
   },
   projectIndicator: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
   },
   taskIndicator: {
-    backgroundColor: '#999',
+    backgroundColor: colors.textSecondary,
   },
   dueIndicatorText: {
     fontSize: 9,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.card,
     textAlign: 'center',
     lineHeight: 9,
   },
@@ -496,7 +531,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: 'white',
+    color: colors.text,
     marginBottom: 12,
   },
   eventsContainer: {
@@ -508,24 +543,24 @@ const styles = StyleSheet.create({
   categoryTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#DC2626',
+    color: colors.primary,
     marginBottom: 4,
   },
   eventItem: {
     flexDirection: 'row',
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     gap: 12,
   },
   projectIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    backgroundColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -533,7 +568,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(153, 153, 153, 0.15)',
+    backgroundColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -555,7 +590,7 @@ const styles = StyleSheet.create({
   eventTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
+    color: colors.text,
     flex: 1,
   },
   statusBadge: {
@@ -570,48 +605,48 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   projectBadge: {
-    backgroundColor: 'rgba(220, 38, 38, 0.2)',
+    backgroundColor: colors.border,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: colors.primary,
   },
   projectBadgeText: {
     fontSize: 9,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: colors.primary,
     letterSpacing: 0.5,
   },
   taskBadge: {
-    backgroundColor: 'rgba(153, 153, 153, 0.2)',
+    backgroundColor: colors.border,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: '#999',
+    borderColor: colors.textSecondary,
   },
   taskBadgeText: {
     fontSize: 9,
     fontWeight: 'bold',
-    color: '#999',
+    color: colors.textSecondary,
     letterSpacing: 0.5,
   },
   eventSubtitle: {
     fontSize: 13,
-    color: '#999',
+    color: colors.textSecondary,
   },
   emptyEventsContainer: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
   },
   emptyEventsText: {
     fontSize: 14,
-    color: '#999',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   loadingContainer: {
@@ -622,6 +657,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textSecondary,
   },
 });

@@ -7,24 +7,65 @@ export interface ProjectWithTasks extends Project {
 }
 
 /**
+ * Get the current authenticated user
+ */
+async function getCurrentUser() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user || null;
+}
+
+/**
  * Fetch all projects with their tasks and team members for the current user
  */
 export async function getProjectsWithTasks(): Promise<ProjectWithTasks[]> {
   try {
-    // Fetch projects with tasks and team members (without auth check for testing)
-    const { data: projects, error: projectsError } = await supabase
+    const user = await getCurrentUser();
+    if (!user) return [];
+    
+    // Fetch projects owned by the user
+    const { data: ownedProjects, error: ownedError } = await supabase
       .from('projects')
       .select(`
         *,
         tasks (*),
         project_members (member_name)
       `)
+      .eq('owner_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (projectsError) throw projectsError;
+    if (ownedError) throw ownedError;
+
+    // Fetch projects where user is a team member
+    const { data: memberProjects, error: memberError } = await supabase
+      .from('project_members')
+      .select(`
+        project_id,
+        projects (
+          *,
+          tasks (*),
+          project_members (member_name)
+        )
+      `)
+      .eq('user_id', user.id);
+
+    if (memberError) throw memberError;
+
+    // Combine and deduplicate projects
+    const allProjects = [...(ownedProjects || [])];
+    const ownedProjectIds = new Set(ownedProjects?.map(p => p.id) || []);
+
+    // Add member projects that aren't already owned
+    (memberProjects || []).forEach((mp: any) => {
+      if (mp.projects && !ownedProjectIds.has(mp.projects.id)) {
+        allProjects.push(mp.projects);
+      }
+    });
+
+    // Sort by created_at
+    allProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     // Transform the data to match the ProjectWithTasks interface
-    return (projects || []).map((project) => ({
+    return allProjects.map((project) => ({
       id: project.id,
       name: project.name,
       description: project.description,
@@ -37,6 +78,7 @@ export async function getProjectsWithTasks(): Promise<ProjectWithTasks[]> {
       team: (project.project_members || []).map((member: any) => member.member_name),
       createdAt: project.created_at,
       updatedAt: project.updated_at,
+      ownerId: project.owner_id,
       tasks: (project.tasks || []).map((task: any) => ({
         id: task.id,
         projectId: project.id,
@@ -117,10 +159,13 @@ export async function createProject(projectData: {
   deadline?: string;
   budget?: string;
   color?: string;
-  teamMembers?: string[];
+  teamMembers?: { id: string; name: string; email: string; avatar_url?: string | null }[];
 }): Promise<Project> {
   try {
-    // Create the project (without auth check for testing)
+    const user = await getCurrentUser();
+    if (!user) throw new Error('User must be authenticated to create projects');
+
+    // Create the project
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .insert({
@@ -131,7 +176,7 @@ export async function createProject(projectData: {
         deadline: projectData.deadline || null,
         budget: projectData.budget ? parseFloat(projectData.budget) : null,
         color: projectData.color || '#3b82f6',
-        owner_id: null, // Set to null since no user is authenticated
+        owner_id: user.id,
         progress: 0,
       })
       .select()
@@ -141,9 +186,10 @@ export async function createProject(projectData: {
 
     // Add team members if provided
     if (projectData.teamMembers && projectData.teamMembers.length > 0) {
-      const members = projectData.teamMembers.map((memberName) => ({
+      const members = projectData.teamMembers.map((member) => ({
         project_id: project.id,
-        member_name: memberName,
+        user_id: member.id,
+        member_name: member.name,
       }));
 
       const { error: membersError } = await supabase
@@ -230,7 +276,6 @@ export async function createTask(
         name: taskData.name,
         deadline: taskData.deadline || null,
         priority: taskData.priority,
-        assignee: taskData.assignee || 'You',
         status: 'Not Started',
         completed: false,
       })
@@ -245,7 +290,7 @@ export async function createTask(
       name: task.name,
       deadline: task.deadline,
       priority: task.priority,
-      assignee: task.assignee,
+      assignee: taskData.assignee || 'You',
       status: task.status as TaskStatus,
       completed: task.completed,
       createdAt: task.created_at,
@@ -327,10 +372,40 @@ export async function updateProjectProgress(projectId: string): Promise<void> {
  */
 export async function toggleFavorite(projectId: string): Promise<boolean> {
   try {
-    // For testing without auth, just return false (not favorited)
-    // In production, this would check/update favorites table
-    console.log('Toggle favorite called for project:', projectId);
-    return false;
+    const user = await getCurrentUser();
+    if (!user) throw new Error('User must be authenticated');
+
+    // Check if already favorited
+    const { data: existing, error: checkError } = await supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('project_id', projectId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+    if (existing) {
+      // Remove favorite
+      const { error: deleteError } = await supabase
+        .from('favorites')
+        .delete()
+        .eq('id', existing.id);
+
+      if (deleteError) throw deleteError;
+      return false;
+    } else {
+      // Add favorite
+      const { error: insertError } = await supabase
+        .from('favorites')
+        .insert({
+          user_id: user.id,
+          project_id: projectId,
+        });
+
+      if (insertError) throw insertError;
+      return true;
+    }
   } catch (error) {
     console.error('Error toggling favorite:', error);
     throw error;
@@ -342,10 +417,340 @@ export async function toggleFavorite(projectId: string): Promise<boolean> {
  */
 export async function getFavoriteProjectIds(): Promise<string[]> {
   try {
-    // For testing without auth, return empty array
-    return [];
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .select('project_id')
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+    return (data || []).map(fav => fav.project_id);
   } catch (error) {
-    console.error('Error fetching favorites:', error);
+    console.error('Error getting favorites:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all favorite projects for the current user
+ */
+export async function getFavoriteProjects(): Promise<ProjectWithTasks[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data: favorites, error } = await supabase
+      .from('favorites')
+      .select(`
+        project_id,
+        projects (
+          *,
+          tasks (*),
+          project_members (member_name)
+        )
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!favorites) return [];
+
+    // Transform the data
+    return favorites
+      .filter((fav: any) => fav.projects) // Filter out null projects
+      .map((fav: any) => {
+        const project = fav.projects;
+        return {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          status: project.status,
+          priority: project.priority,
+          progress: project.progress,
+          deadline: project.deadline,
+          budget: project.budget,
+          color: project.color,
+          team: (project.project_members || []).map((member: any) => member.member_name),
+          createdAt: project.created_at,
+          updatedAt: project.updated_at,
+          ownerId: project.owner_id,
+          tasks: (project.tasks || []).map((task: any) => ({
+            id: task.id,
+            projectId: project.id,
+            name: task.name,
+            deadline: task.deadline,
+            priority: task.priority,
+            assignee: task.assignee,
+            status: task.status as TaskStatus,
+            completed: task.completed,
+            createdAt: task.created_at,
+          })),
+          teamMembers: (project.project_members || []).map((member: any) => member.member_name),
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching favorite projects:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get dashboard statistics for the current user
+ */
+export async function getDashboardStats() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return {
+        totalProjects: 0,
+        activeProjects: 0,
+        totalTasks: 0,
+        completedTasks: 0,
+        upcomingDeadlines: 0,
+      };
+    }
+
+    // Get all projects (owned + member of)
+    const { data: ownedProjects } = await supabase
+      .from('projects')
+      .select('id, status')
+      .eq('owner_id', user.id);
+
+    const { data: memberProjects } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id);
+
+    const allProjectIds = [
+      ...(ownedProjects || []).map(p => p.id),
+      ...(memberProjects || []).map(m => m.project_id),
+    ];
+
+    const uniqueProjectIds = [...new Set(allProjectIds)];
+
+    // Count active projects (not Completed, Paused, or Archived)
+    const activeCount = (ownedProjects || []).filter(
+      p => !['Completed', 'Paused', 'Archived'].includes(p.status)
+    ).length;
+
+    // Get tasks
+    const { data: tasks } = await supabase
+      .from('tasks')
+      .select('completed, deadline')
+      .in('project_id', uniqueProjectIds.length > 0 ? uniqueProjectIds : ['']);
+
+    const completedCount = (tasks || []).filter(t => t.completed).length;
+
+    // Count upcoming deadlines (within 7 days)
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const upcomingCount = (tasks || []).filter(t => {
+      if (!t.deadline || t.completed) return false;
+      const deadline = new Date(t.deadline);
+      return deadline >= now && deadline <= sevenDaysFromNow;
+    }).length;
+
+    return {
+      totalProjects: uniqueProjectIds.length,
+      activeProjects: activeCount,
+      totalTasks: tasks?.length || 0,
+      completedTasks: completedCount,
+      upcomingDeadlines: upcomingCount,
+    };
+  } catch (error) {
+    console.error('Error getting dashboard stats:', error);
+    return {
+      totalProjects: 0,
+      activeProjects: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      upcomingDeadlines: 0,
+    };
+  }
+}
+
+/**
+ * Get recent activity (recently updated projects and tasks)
+ */
+export async function getRecentActivity() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No user found for recent activity');
+      return [];
+    }
+
+    // Get all project IDs (owned + member)
+    const { data: ownedProjects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('owner_id', user.id);
+
+    const { data: memberProjects } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id);
+
+    const allProjectIds = [
+      ...(ownedProjects || []).map(p => p.id),
+      ...(memberProjects || []).map(m => m.project_id),
+    ];
+
+    const uniqueProjectIds = [...new Set(allProjectIds)];
+
+    console.log('Recent Activity - Project IDs:', uniqueProjectIds);
+
+    if (uniqueProjectIds.length === 0) {
+      console.log('No projects found for recent activity');
+      return [];
+    }
+
+    // Get recent projects
+    const { data: recentProjects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id, name, status, updated_at, color')
+      .in('id', uniqueProjectIds)
+      .order('updated_at', { ascending: false })
+      .limit(10);
+
+    if (projectsError) {
+      console.error('Error fetching recent projects:', projectsError);
+    }
+
+    console.log('Recent projects:', recentProjects);
+
+    // Get recent tasks from these projects
+    const { data: recentTasks, error: tasksError } = await supabase
+      .from('tasks')
+      .select(`
+        id,
+        name,
+        status,
+        completed,
+        updated_at,
+        project_id,
+        projects (name, color)
+      `)
+      .in('project_id', uniqueProjectIds)
+      .order('updated_at', { ascending: false })
+      .limit(10);
+
+    if (tasksError) {
+      console.error('Error fetching recent tasks:', tasksError);
+    }
+
+    console.log('Recent tasks:', recentTasks);
+
+    // Combine and sort by updated_at
+    const activities = [
+      ...(recentProjects || []).map((p: any) => ({
+        id: p.id,
+        type: 'project' as const,
+        title: p.name,
+        subtitle: `Status: ${p.status}`,
+        timestamp: p.updated_at,
+        color: p.color || '#3b82f6',
+      })),
+      ...(recentTasks || []).map((t: any) => ({
+        id: t.id,
+        type: 'task' as const,
+        title: t.name,
+        subtitle: `${t.projects?.name || 'Unknown'} • ${t.status}`,
+        timestamp: t.updated_at,
+        color: t.projects?.color || '#3b82f6',
+      })),
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    console.log('Combined activities:', activities.length);
+    
+    return activities.slice(0, 10);
+  } catch (error) {
+    console.error('Error getting recent activity:', error);
+    return [];
+  }
+}
+
+/**
+ * Get upcoming tasks (within next 7 days)
+ */
+export async function getUpcomingTasks() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      console.log('No user found for upcoming tasks');
+      return [];
+    }
+
+    // Get project IDs
+    const { data: ownedProjects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('owner_id', user.id);
+
+    const { data: memberProjects } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id);
+
+    const allProjectIds = [
+      ...(ownedProjects || []).map(p => p.id),
+      ...(memberProjects || []).map(m => m.project_id),
+    ];
+
+    const uniqueProjectIds = [...new Set(allProjectIds)];
+
+    console.log('Upcoming Tasks - Project IDs:', uniqueProjectIds);
+
+    if (uniqueProjectIds.length === 0) {
+      console.log('No projects found for upcoming tasks');
+      return [];
+    }
+
+    // Get upcoming tasks
+    const now = new Date().toISOString().split('T')[0];
+    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    console.log('Date range:', { now, sevenDaysFromNow });
+
+    const { data: tasks, error: tasksError } = await supabase
+      .from('tasks')
+      .select(`
+        id,
+        name,
+        deadline,
+        priority,
+        status,
+        completed,
+        project_id,
+        projects (name, color)
+      `)
+      .in('project_id', uniqueProjectIds)
+      .eq('completed', false)
+      .not('deadline', 'is', null)
+      .gte('deadline', now)
+      .lte('deadline', sevenDaysFromNow)
+      .order('deadline', { ascending: true });
+
+    if (tasksError) {
+      console.error('Error fetching upcoming tasks:', tasksError);
+    }
+
+    console.log('Upcoming tasks found:', tasks?.length || 0);
+    console.log('Tasks:', tasks);
+
+    return (tasks || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      deadline: t.deadline,
+      priority: t.priority,
+      status: t.status,
+      projectName: t.projects?.name || 'Unknown Project',
+      projectColor: t.projects?.color || '#3b82f6',
+    }));
+  } catch (error) {
+    console.error('Error getting upcoming tasks:', error);
     return [];
   }
 }
@@ -551,5 +956,384 @@ export async function deleteFile(fileId: string, filePath: string): Promise<void
   } catch (error) {
     console.error('Error deleting file:', error);
     throw error;
+  }
+}
+
+/**
+ * Search for users by name (for adding to projects)
+ */
+export async function searchUsers(query: string): Promise<{ id: string; name: string; email: string; avatar_url: string | null }[]> {
+  try {
+    if (!query.trim()) return [];
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url')
+      .ilike('full_name', `%${query}%`)
+      .limit(10);
+
+    if (error) throw error;
+
+    return (data || []).map((user) => ({
+      id: user.id,
+      name: user.full_name || user.email,
+      email: user.email,
+      avatar_url: user.avatar_url,
+    }));
+  } catch (error) {
+    console.error('Error searching users:', error);
+    return [];
+  }
+}
+
+/**
+ * Get team members for a specific project
+ */
+export async function getProjectTeamMembers(projectId: string): Promise<{ id: string; name: string; email: string; avatar_url: string | null }[]> {
+  try {
+    // First get project members
+    const { data: members, error: membersError } = await supabase
+      .from('project_members')
+      .select('user_id, member_name')
+      .eq('project_id', projectId);
+
+    if (membersError) throw membersError;
+    if (!members || members.length === 0) return [];
+
+    // Get user IDs
+    const userIds = members.map(m => m.user_id);
+
+    // Then get profiles for those users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, email, avatar_url')
+      .in('id', userIds);
+
+    if (profilesError) throw profilesError;
+
+    // Combine the data
+    return members.map(member => {
+      const profile = profiles?.find(p => p.id === member.user_id);
+      return {
+        id: member.user_id,
+        name: member.member_name,
+        email: profile?.email || '',
+        avatar_url: profile?.avatar_url || null,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting project team members:', error);
+    return [];
+  }
+}
+
+// =====================================================
+// TASK FAVORITES
+// =====================================================
+
+/**
+ * Toggle favorite status for a task
+ */
+export async function toggleTaskFavorite(taskId: string): Promise<boolean> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('User must be authenticated');
+
+    // Check if already favorited
+    const { data: existing, error: checkError } = await supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('task_id', taskId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+    if (existing) {
+      // Remove favorite
+      const { error: deleteError } = await supabase
+        .from('favorites')
+        .delete()
+        .eq('id', existing.id);
+
+      if (deleteError) throw deleteError;
+      return false;
+    } else {
+      // Add favorite
+      const { error: insertError } = await supabase
+        .from('favorites')
+        .insert({
+          user_id: user.id,
+          task_id: taskId,
+        });
+
+      if (insertError) throw insertError;
+      return true;
+    }
+  } catch (error) {
+    console.error('Error toggling task favorite:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all favorite tasks for the current user
+ */
+export async function getFavoriteTasks(): Promise<Task[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data: favorites, error } = await supabase
+      .from('favorites')
+      .select(`
+        task_id,
+        tasks (
+          id,
+          project_id,
+          name,
+          deadline,
+          priority,
+          assignee,
+          status,
+          completed,
+          created_at,
+          projects (name, color)
+        )
+      `)
+      .eq('user_id', user.id)
+      .not('task_id', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!favorites) return [];
+
+    // Transform the data
+    return favorites
+      .filter((fav: any) => fav.tasks) // Filter out null tasks
+      .map((fav: any) => {
+        const task = fav.tasks;
+        return {
+          id: task.id,
+          projectId: task.project_id,
+          name: task.name,
+          deadline: task.deadline,
+          priority: task.priority,
+          assignee: task.assignee || 'Unassigned',
+          status: task.status as TaskStatus,
+          completed: task.completed,
+          createdAt: task.created_at,
+          projectName: task.projects?.name || 'Unknown Project',
+          projectColor: task.projects?.color || '#3b82f6',
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching favorite tasks:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get favorite task IDs for the current user
+ */
+export async function getFavoriteTaskIds(): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .select('task_id')
+      .eq('user_id', user.id)
+      .not('task_id', 'is', null);
+
+    if (error) throw error;
+    return (data || []).map(fav => fav.task_id).filter(Boolean);
+  } catch (error) {
+    console.error('Error getting favorite task IDs:', error);
+    return [];
+  }
+}
+
+// =====================================================
+// MEMBER FAVORITES
+// =====================================================
+
+/**
+ * Toggle favorite status for a team member
+ */
+export async function toggleMemberFavorite(memberId: string): Promise<boolean> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) throw new Error('User must be authenticated');
+
+    // Prevent users from favoriting themselves
+    if (user.id === memberId) {
+      throw new Error('Cannot favorite yourself');
+    }
+
+    // Check if already favorited
+    const { data: existing, error: checkError } = await supabase
+      .from('favorites')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('member_id', memberId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') throw checkError;
+
+    if (existing) {
+      // Remove favorite
+      const { error: deleteError } = await supabase
+        .from('favorites')
+        .delete()
+        .eq('id', existing.id);
+
+      if (deleteError) throw deleteError;
+      return false;
+    } else {
+      // Add favorite
+      const { error: insertError } = await supabase
+        .from('favorites')
+        .insert({
+          user_id: user.id,
+          member_id: memberId,
+        });
+
+      if (insertError) throw insertError;
+      return true;
+    }
+  } catch (error) {
+    console.error('Error toggling member favorite:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all favorite team members for the current user
+ */
+export async function getFavoriteMembers(): Promise<{ id: string; name: string; email: string; avatar_url: string | null }[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data: favorites, error } = await supabase
+      .from('favorites')
+      .select(`
+        member_id,
+        profiles!favorites_member_id_fkey (
+          id,
+          full_name,
+          email,
+          avatar_url
+        )
+      `)
+      .eq('user_id', user.id)
+      .not('member_id', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!favorites) return [];
+
+    // Transform the data
+    return favorites
+      .filter((fav: any) => fav.profiles) // Filter out null profiles
+      .map((fav: any) => {
+        const profile = fav.profiles;
+        return {
+          id: profile.id,
+          name: profile.full_name || profile.email,
+          email: profile.email,
+          avatar_url: profile.avatar_url,
+        };
+      });
+  } catch (error) {
+    console.error('Error fetching favorite members:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get favorite member IDs for the current user
+ */
+export async function getFavoriteMemberIds(): Promise<string[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    const { data, error } = await supabase
+      .from('favorites')
+      .select('member_id')
+      .eq('user_id', user.id)
+      .not('member_id', 'is', null);
+
+    if (error) throw error;
+    return (data || []).map(fav => fav.member_id).filter(Boolean);
+  } catch (error) {
+    console.error('Error getting favorite member IDs:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all team members the user collaborates with (across all projects)
+ */
+export async function getAllTeamMembers(): Promise<{ id: string; name: string; email: string; avatar_url: string | null }[]> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return [];
+
+    // Get all projects the user is part of
+    const { data: ownedProjects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('owner_id', user.id);
+
+    const { data: memberProjects } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id);
+
+    const allProjectIds = [
+      ...(ownedProjects || []).map(p => p.id),
+      ...(memberProjects || []).map(m => m.project_id),
+    ];
+
+    const uniqueProjectIds = [...new Set(allProjectIds)];
+
+    if (uniqueProjectIds.length === 0) return [];
+
+    // Get all team members from these projects
+    const { data: members, error: membersError } = await supabase
+      .from('project_members')
+      .select('user_id, member_name')
+      .in('project_id', uniqueProjectIds);
+
+    if (membersError) throw membersError;
+    if (!members || members.length === 0) return [];
+
+    // Get unique user IDs (excluding current user)
+    const uniqueUserIds = [...new Set(members.map(m => m.user_id))].filter(id => id !== user.id);
+
+    if (uniqueUserIds.length === 0) return [];
+
+    // Get profiles for these users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url')
+      .in('id', uniqueUserIds);
+
+    if (profilesError) throw profilesError;
+
+    // Combine the data
+    return (profiles || []).map(profile => ({
+      id: profile.id,
+      name: profile.full_name || profile.email,
+      email: profile.email,
+      avatar_url: profile.avatar_url,
+    }));
+  } catch (error) {
+    console.error('Error getting all team members:', error);
+    return [];
   }
 }

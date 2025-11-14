@@ -1,19 +1,18 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { sendPasswordResetEmail } from "firebase/auth";
 import { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function ForgotPasswordScreen() {
@@ -29,21 +28,12 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
 
     try {
-      // Configure action code settings for mobile deep linking
-      const actionCodeSettings = {
-        url: "https://managemate-32f1d.firebaseapp.com/?email=" + email,
-        iOS: {
-          bundleId: "com.managemate.app",
-        },
-        android: {
-          packageName: "com.managemate.app",
-          installApp: true,
-          minimumVersion: "1",
-        },
-        handleCodeInApp: true,
-      };
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'managemate://auth/reset-password',
+      });
 
-      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+      if (error) throw error;
+
       setLoading(false);
 
       Alert.alert(
@@ -55,10 +45,8 @@ export default function ForgotPasswordScreen() {
       setLoading(false);
       let errorMessage = "An error occurred";
 
-      if (error.code === "auth/invalid-email") {
+      if (error.message?.includes("invalid email")) {
         errorMessage = "Invalid email address";
-      } else if (error.code === "auth/user-not-found") {
-        errorMessage = "No account found with this email";
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -92,7 +80,7 @@ export default function ForgotPasswordScreen() {
 
           <Text style={styles.headerTitle}>Forgot Password?</Text>
           <Text style={styles.headerSubtitle}>
-            Enter your email and we'll send you a link to reset your password
+            Enter your email and we&apos;ll send you a link to reset your password
           </Text>
         </LinearGradient>
 

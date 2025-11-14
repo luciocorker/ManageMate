@@ -1,24 +1,18 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
-import { signInWithApple, signInWithGoogle } from "@/lib/socialAuth";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import {
-  sendEmailVerification,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
 import { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function SignInScreen() {
@@ -36,15 +30,18 @@ export default function SignInScreen() {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
+      console.log("Attempting sign in...");
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
-      );
-      const user = userCredential.user;
+        password,
+      });
+
+      console.log("Sign in response:", { hasData: !!data, hasError: !!error, error: error?.message });
+      
+      if (error) throw error;
 
       // Check if email is verified
-      if (!user.emailVerified) {
+      if (data.user && !data.user.email_confirmed_at) {
         setLoading(false);
         Alert.alert(
           "Email Not Verified",
@@ -55,44 +52,42 @@ export default function SignInScreen() {
               text: "Resend Email",
               onPress: async () => {
                 try {
-                  await sendEmailVerification(user);
+                  const { error: resendError } = await supabase.auth.resend({
+                    type: 'signup',
+                    email: email,
+                  });
+                  if (resendError) throw resendError;
                   Alert.alert("Success", "Verification email sent!");
-                } catch (err) {
-                  Alert.alert("Error", "Failed to send verification email");
+                } catch (err: any) {
+                  Alert.alert("Error", err.message || "Failed to send verification email");
                 }
               },
             },
           ]
         );
         // Sign out the user since they're not verified
-        await auth.signOut();
+        await supabase.auth.signOut();
         return;
       }
 
-      // Update Supabase with verified status
-      await supabase
-        .from("users")
-        .update({ email_verified: true })
-        .eq("firebase_uid", user.uid);
-
+      // Successfully signed in
+      console.log("Sign in successful, user:", data.user?.email);
       setLoading(false);
       router.replace("/(tabs)/dashboard");
     } catch (error: any) {
+      console.error("Sign in error:", error);
       setLoading(false);
       let errorMessage = "An error occurred during sign in";
 
-      if (error.code === "auth/invalid-email") {
-        errorMessage = "Invalid email address";
-      } else if (error.code === "auth/user-not-found") {
-        errorMessage = "No account found with this email";
-      } else if (error.code === "auth/wrong-password") {
-        errorMessage = "Incorrect password";
-      } else if (error.code === "auth/invalid-credential") {
+      if (error.message?.includes("Invalid login credentials")) {
         errorMessage = "Invalid email or password";
+      } else if (error.message?.includes("Email not confirmed")) {
+        errorMessage = "Please verify your email first";
       } else if (error.message) {
         errorMessage = error.message;
       }
 
+      console.log("Showing error alert:", errorMessage);
       Alert.alert("Sign In Failed", errorMessage);
     }
   };
@@ -102,39 +97,15 @@ export default function SignInScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    setLoading(true);
-    const result = await signInWithGoogle();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else {
-      Alert.alert("Google Sign In Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "Google Sign In with Supabase will be available soon");
   };
 
   const handleAppleSignIn = async () => {
-    setLoading(true);
-    const result = await signInWithApple();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else if (result.error !== "Sign in was canceled") {
-      Alert.alert("Apple Sign In Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "Apple Sign In with Supabase will be available soon");
   };
 
   const handleGithubSignIn = async () => {
-    setLoading(true);
-    const result = await signInWithGithub();
-    setLoading(false);
-
-    if (result.success) {
-      router.replace("/(tabs)/dashboard");
-    } else {
-      Alert.alert("GitHub Sign In Failed", result.error || "An error occurred");
-    }
+    Alert.alert("Coming Soon", "GitHub Sign In with Supabase will be available soon");
   };
 
   return (
@@ -264,7 +235,7 @@ export default function SignInScreen() {
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/signup")}>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>

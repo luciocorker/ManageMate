@@ -1,23 +1,22 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { confirmPasswordReset } from "firebase/auth";
 import { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function ResetPasswordScreen() {
-  const { oobCode } = useLocalSearchParams<{ oobCode: string }>();
+  const { access_token } = useLocalSearchParams<{ access_token: string }>();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +39,7 @@ export default function ResetPasswordScreen() {
       return;
     }
 
-    if (!oobCode) {
+    if (!access_token) {
       Alert.alert("Error", "Invalid reset link");
       return;
     }
@@ -48,7 +47,13 @@ export default function ResetPasswordScreen() {
     setLoading(true);
 
     try {
-      await confirmPasswordReset(auth, oobCode, newPassword);
+      // Update the password using Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
       setLoading(false);
 
       Alert.alert(
@@ -60,11 +65,7 @@ export default function ResetPasswordScreen() {
       setLoading(false);
       let errorMessage = "An error occurred";
 
-      if (error.code === "auth/expired-action-code") {
-        errorMessage = "This reset link has expired. Please request a new one.";
-      } else if (error.code === "auth/invalid-action-code") {
-        errorMessage = "This reset link is invalid or has already been used.";
-      } else if (error.message) {
+      if (error.message) {
         errorMessage = error.message;
       }
 

@@ -1,30 +1,47 @@
-import { auth } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { Redirect } from "expo-router";
-import { onAuthStateChanged } from "firebase/auth";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Image, View } from "react-native";
 
 export default function Index() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Listen to auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
+    // Check current session
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("Initial auth check:", !!session);
+      setIsAuthenticated(!!session);
+    };
+    
+    checkAuth();
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event, !!session);
+      setIsAuthenticated(!!session);
     });
 
-    // Cleanup subscription
-    return () => unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   if (isAuthenticated === null) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#667eea" />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#ffffff" }}>
+        <Image
+          source={require("@/assets/images/managemate-logo.png")}
+          style={{ width: 200, height: 200, marginBottom: 30 }}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color="#DC2626" />
       </View>
     );
   }
 
+  console.log("Redirecting to:", isAuthenticated ? "dashboard" : "landing");
+  
   return isAuthenticated ? (
     <Redirect href="/(tabs)/dashboard" />
   ) : (

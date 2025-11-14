@@ -40,6 +40,7 @@ export interface Project {
   updatedAt: string;
   tasks?: Task[];
   isFavorite?: boolean;
+  ownerId?: string;
 }
 
 export interface FavoriteProject {

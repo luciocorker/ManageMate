@@ -4,14 +4,14 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { supabase } from '@/lib/supabase';
-import { createTask, deleteFile as deleteFileFromDb, deleteTask, getProjectById, getProjectFiles, updateTaskStatus, uploadFile } from '@/lib/supabaseService';
+import { createTask, deleteFile as deleteFileFromDb, deleteTask, getProjectById, getProjectFiles, getProjectTeamMembers, searchUsers, updateTaskStatus, uploadFile } from '@/lib/supabaseService';
 import { Project, ProjectFile, Task } from '@/types/project';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Linking, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface AlertConfig {
   visible: boolean;
@@ -30,24 +30,46 @@ export default function ProjectDetailsScreen() {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string; avatar_url: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [showAddFile, setShowAddFile] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskAssignee, setNewTaskAssignee] = useState('');
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newFileName, setNewFileName] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberSearchResults, setMemberSearchResults] = useState<{ id: string; name: string; email: string; avatar_url: string | null }[]>([]);
   const [alert, setAlert] = useState<AlertConfig>({ visible: false, title: '' });
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
   useEffect(() => {
+    loadUserInfo();
     loadProject();
     loadFiles();
+    loadTeamMembers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const loadUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.full_name) {
+          setCurrentUserName(profile.full_name);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user info:', error);
+    }
+  };
 
   const loadProject = async () => {
     try {
@@ -73,6 +95,15 @@ export default function ProjectDetailsScreen() {
       setFiles(projectFiles);
     } catch (error) {
       console.error('Error loading files:', error);
+    }
+  };
+
+  const loadTeamMembers = async () => {
+    try {
+      const members = await getProjectTeamMembers(String(id));
+      setTeamMembers(members);
+    } catch (error) {
+      console.error('Error loading team members:', error);
     }
   };
 
@@ -198,30 +229,55 @@ export default function ProjectDetailsScreen() {
     });
   };
 
-  const handleAddMember = () => {
-    if (!newMemberName.trim()) {
+  const handleSearchMembers = async (query: string) => {
+    setMemberSearch(query);
+    if (query.trim().length >= 2) {
+      const results = await searchUsers(query);
+      // Filter out already added team members
+      const filtered = results.filter(user => !teamMembers.some(member => member.id === user.id));
+      setMemberSearchResults(filtered);
+    } else {
+      setMemberSearchResults([]);
+    }
+  };
+
+  const handleAddMember = async (user: { id: string; name: string; email: string; avatar_url: string | null }) => {
+    try {
+      // Add member to database
+      const { error } = await supabase
+        .from('project_members')
+        .insert({
+          project_id: project!.id,
+          user_id: user.id,
+          member_name: user.name,
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setTeamMembers([...teamMembers, user]);
+      setMemberSearch('');
+      setMemberSearchResults([]);
+      setShowAddMember(false);
+      
+      setAlert({
+        visible: true,
+        title: 'Success',
+        message: 'Team member added successfully',
+        buttons: [{ text: 'OK' }]
+      });
+    } catch (error) {
+      console.error('Error adding member:', error);
       setAlert({
         visible: true,
         title: 'Error',
-        message: 'Please enter a member name',
+        message: 'Failed to add team member',
         buttons: [{ text: 'OK' }]
       });
-      return;
     }
-
-    const updatedTeam = [...(project.team || []), newMemberName.trim()];
-    setProject({ ...project, team: updatedTeam });
-    setNewMemberName('');
-    setShowAddMember(false);
-    setAlert({
-      visible: true,
-      title: 'Success',
-      message: 'Team member added successfully',
-      buttons: [{ text: 'OK' }]
-    });
   };
 
-  const handleRemoveMember = (memberName: string) => {
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
     setAlert({
       visible: true,
       title: 'Remove Member',
@@ -231,9 +287,30 @@ export default function ProjectDetailsScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
-            const updatedTeam = (project.team || []).filter(m => m !== memberName);
-            setProject({ ...project, team: updatedTeam });
+          onPress: async () => {
+            try {
+              // Remove from database
+              const { error } = await supabase
+                .from('project_members')
+                .delete()
+                .eq('project_id', project!.id)
+                .eq('user_id', memberId);
+
+              if (error) throw error;
+
+              // Update local state
+              setTeamMembers(teamMembers.filter(m => m.id !== memberId));
+              
+              setAlert({
+                visible: true,
+                title: 'Success',
+                message: 'Team member removed',
+                buttons: [{ text: 'OK' }]
+              });
+            } catch (error) {
+              console.error('Error removing member:', error);
+              Alert.alert('Error', 'Failed to remove team member');
+            }
           },
         },
       ]
@@ -275,8 +352,6 @@ export default function ProjectDetailsScreen() {
         message: `File "${file.name}" uploaded successfully`,
         buttons: [{ text: 'OK' }]
       });
-      
-      setShowAddFile(false);
     } catch (error) {
       console.error('Error uploading file:', error);
       Alert.alert('Error', 'Failed to upload file');
@@ -483,19 +558,23 @@ export default function ProjectDetailsScreen() {
               {/* Assignee Picker */}
               <View style={styles.assigneeContainer}>
                 <ThemedText style={styles.assigneeLabel}>Assign to team member (defaults to You):</ThemedText>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assigneeScroll}>
-                  {project.team?.map((member) => (
-                    <TouchableOpacity 
-                      key={member}
-                      style={[styles.assigneeChip, newTaskAssignee === member && styles.assigneeChipSelected]}
-                      onPress={() => setNewTaskAssignee(member)}
-                    >
-                      <ThemedText style={[styles.assigneeChipText, newTaskAssignee === member && styles.assigneeChipTextSelected]}>
-                        {member}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                {teamMembers.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assigneeScroll}>
+                    {teamMembers.map((member) => (
+                      <TouchableOpacity 
+                        key={member.id}
+                        style={[styles.assigneeChip, newTaskAssignee === member.name && styles.assigneeChipSelected]}
+                        onPress={() => setNewTaskAssignee(member.name)}
+                      >
+                        <ThemedText style={[styles.assigneeChipText, newTaskAssignee === member.name && styles.assigneeChipTextSelected]}>
+                          {member.name}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <ThemedText style={styles.noTeamMembers}>No team members added to this project yet.</ThemedText>
+                )}
               </View>
               
               <TouchableOpacity style={styles.addButtonSmall} onPress={handleAddTask}>
@@ -547,7 +626,7 @@ export default function ProjectDetailsScreen() {
                   )}
                   {task.assignee && (
                     <ThemedText style={styles.taskAssignee}>
-                      Assigned to: {task.assignee}
+                      Assigned to: {task.assignee === currentUserName ? 'you' : task.assignee}
                     </ThemedText>
                   )}
                 </View>
@@ -563,7 +642,7 @@ export default function ProjectDetailsScreen() {
         <ThemedView style={styles.section} lightColor="#1e1e1e" darkColor="#1e1e1e">
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
-              Team Members ({project.team?.length || 0})
+              Team Members ({teamMembers.length})
             </ThemedText>
             <TouchableOpacity onPress={() => setShowAddMember(!showAddMember)}>
               <IconSymbol name={showAddMember ? "xmark" : "plus"} size={24} color="#DC2626" />
@@ -574,29 +653,63 @@ export default function ProjectDetailsScreen() {
             <View style={styles.addForm}>
               <TextInput
                 style={styles.input}
-                placeholder="Enter member name"
+                placeholder="Search users by name..."
                 placeholderTextColor="#999"
-                value={newMemberName}
-                onChangeText={setNewMemberName}
+                value={memberSearch}
+                onChangeText={handleSearchMembers}
               />
-              <TouchableOpacity style={styles.addButtonSmall} onPress={handleAddMember}>
-                <ThemedText style={styles.addButtonText}>Add Member</ThemedText>
-              </TouchableOpacity>
+              
+              {/* Search Results */}
+              {memberSearchResults.length > 0 && (
+                <View style={styles.searchResults}>
+                  {memberSearchResults.map((user) => (
+                    <TouchableOpacity
+                      key={user.id}
+                      style={styles.searchResultItem}
+                      onPress={() => handleAddMember(user)}
+                    >
+                      {user.avatar_url ? (
+                        <Image
+                          source={{ uri: user.avatar_url }}
+                          style={styles.searchResultAvatar}
+                        />
+                      ) : (
+                        <View style={styles.searchResultAvatarPlaceholder}>
+                          <IconSymbol name="person.fill" size={20} color="#DC2626" />
+                        </View>
+                      )}
+                      <View style={styles.searchResultInfo}>
+                        <ThemedText style={styles.searchResultName}>{user.name}</ThemedText>
+                        <ThemedText style={styles.searchResultEmail}>{user.email}</ThemedText>
+                      </View>
+                      <IconSymbol name="plus.circle.fill" size={24} color="#DC2626" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
-          {(!project.team || project.team.length === 0) ? (
+          {teamMembers.length === 0 ? (
             <ThemedText style={styles.emptyText}>No team members yet. Add someone!</ThemedText>
           ) : (
-            project.team.map((member, index) => (
-              <View key={index} style={styles.memberItem}>
-                <View style={styles.memberAvatar}>
-                  <ThemedText style={styles.memberInitial}>
-                    {member.charAt(0).toUpperCase()}
-                  </ThemedText>
+            teamMembers.map((member) => (
+              <View key={member.id} style={styles.memberItem}>
+                {member.avatar_url ? (
+                  <Image
+                    source={{ uri: member.avatar_url }}
+                    style={styles.memberAvatar}
+                  />
+                ) : (
+                  <View style={styles.memberAvatarPlaceholder}>
+                    <IconSymbol name="person.fill" size={20} color="#DC2626" />
+                  </View>
+                )}
+                <View style={styles.memberInfo}>
+                  <ThemedText style={styles.memberName}>{member.name}</ThemedText>
+                  <ThemedText style={styles.memberEmail}>{member.email}</ThemedText>
                 </View>
-                <ThemedText style={styles.memberName}>{member}</ThemedText>
-                <TouchableOpacity onPress={() => handleRemoveMember(member)}>
+                <TouchableOpacity onPress={() => handleRemoveMember(member.id, member.name)}>
                   <IconSymbol name="trash" size={20} color="#DC2626" />
                 </TouchableOpacity>
               </View>
@@ -965,6 +1078,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 20,
   },
+  noTeamMembers: {
+    fontSize: 14,
+    color: '#999',
+    fontStyle: 'italic',
+    paddingVertical: 12,
+  },
   errorText: {
     fontSize: 16,
     color: '#DC2626',
@@ -1022,5 +1141,65 @@ const styles = StyleSheet.create({
   fileSize: {
     fontSize: 12,
     color: '#999',
+  },
+  searchResults: {
+    marginTop: 8,
+    backgroundColor: '#121212',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 8,
+    maxHeight: 200,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+    gap: 12,
+  },
+  searchResultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2a2a2a',
+  },
+  searchResultAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchResultInfo: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 14,
+    color: 'white',
+    fontWeight: '600',
+  },
+  searchResultEmail: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  memberAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberEmail: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
   },
 });

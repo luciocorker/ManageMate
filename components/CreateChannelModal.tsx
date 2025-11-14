@@ -1,12 +1,13 @@
+import { User } from "@/lib/messagingService";
 import { useState } from "react";
 import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
@@ -35,19 +36,18 @@ const CheckIcon = () => (
   </Svg>
 );
 
-interface Friend {
-  id: number;
-  name: string;
-  message: string;
-  avatar: string;
-  online: boolean;
-}
+// Helper to get avatar color
+const getAvatarColor = (userId: string) => {
+  const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2"];
+  const index = parseInt(userId.slice(0, 8), 16) % colors.length;
+  return colors[index];
+};
 
 interface CreateChannelModalProps {
   visible: boolean;
   onClose: () => void;
-  onCreateChannel: (channelName: string, selectedFriends: Friend[]) => void;
-  friends: Friend[];
+  onCreateChannel: (channelName: string, selectedFriends: User[]) => void;
+  friends: User[];
 }
 
 export default function CreateChannelModal({
@@ -57,9 +57,9 @@ export default function CreateChannelModal({
   friends,
 }: CreateChannelModalProps) {
   const [channelName, setChannelName] = useState("");
-  const [selectedFriends, setSelectedFriends] = useState<number[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
 
-  const toggleFriend = (friendId: number) => {
+  const toggleFriend = (friendId: string) => {
     setSelectedFriends((prev) =>
       prev.includes(friendId)
         ? prev.filter((id) => id !== friendId)
@@ -133,17 +133,17 @@ export default function CreateChannelModal({
                     <View
                       style={[
                         styles.friendAvatar,
-                        { backgroundColor: friend.avatar },
+                        { backgroundColor: getAvatarColor(friend.id) },
                       ]}
                     >
                       <Text style={styles.friendAvatarText}>
-                        {friend.name.charAt(0)}
+                        {friend.full_name?.charAt(0) || "?"}
                       </Text>
                     </View>
                     <View style={styles.friendInfo}>
-                      <Text style={styles.friendName}>{friend.name}</Text>
+                      <Text style={styles.friendName}>{friend.full_name || "Unknown User"}</Text>
                       <Text style={styles.friendStatus}>
-                        {friend.online ? "Online" : "Offline"}
+                        {friend.email}
                       </Text>
                     </View>
                     {isSelected && (

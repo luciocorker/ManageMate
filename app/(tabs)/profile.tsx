@@ -1,19 +1,20 @@
 import EditProfileModal from "@/components/EditProfileModal";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
+import { useTheme } from "@/contexts/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  Alert,
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface UserStats {
@@ -33,6 +34,14 @@ interface Achievement {
   date?: string;
 }
 
+interface RecentActivity {
+  id: string;
+  title: string;
+  time: string;
+  icon: string;
+  type: 'task' | 'project' | 'achievement';
+}
+
 interface UserProfile {
   full_name: string;
   phone_number: string;
@@ -44,7 +53,8 @@ interface UserProfile {
 }
 
 export default function ProfileScreen() {
-  const [user, setUser] = useState(auth.currentUser);
+  const { theme, toggleTheme, colors } = useTheme();
+  const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [stats, setStats] = useState<UserStats>({
@@ -54,7 +64,8 @@ export default function ProfileScreen() {
     totalProjects: 0,
     achievements: 0,
   });
-  const [achievements, setAchievements] = useState<Achievement[]>([
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [achievements] = useState<Achievement[]>([
     {
       id: "1",
       title: "First Task",
@@ -103,23 +114,36 @@ export default function ProfileScreen() {
   ]);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        loadUserProfile(currentUser.uid);
-        loadUserStats(currentUser.uid);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
+      if (session?.user) {
+        loadUserProfile(session.user.id);
+        loadUserStats(session.user.id);
       }
     });
 
-    return () => unsubscribe();
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+      if (session?.user) {
+        loadUserProfile(session.user.id);
+        loadUserStats(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from("users")
+        .from("profiles")
         .select("*")
-        .eq("firebase_uid", userId)
+        .eq("id", userId)
         .single();
 
       if (error) throw error;
@@ -132,7 +156,7 @@ export default function ProfileScreen() {
           linkedin_url: data.linkedin_url || "",
           github_url: data.github_url || "",
           bio: data.bio || "",
-          profile_picture_url: data.profile_picture_url || "",
+          profile_picture_url: data.avatar_url || "",
         });
       }
     } catch (error) {
@@ -141,14 +165,130 @@ export default function ProfileScreen() {
   };
 
   const loadUserStats = async (userId: string) => {
-    // Mock data - replace with actual Supabase queries
-    setStats({
-      totalTasks: 24,
-      completedTasks: 18,
-      activeTasks: 6,
-      totalProjects: 5,
-      achievements: 3,
-    });
+    try {
+      // Get all projects (owned + member of) - same as dashboard
+      const { data: ownedProjects } = await supabase
+        .from('projects')
+        .select('id, status')
+        .eq('owner_id', userId);
+
+      const { data: memberProjects } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', userId);
+
+      const allProjectIds = [
+        ...(ownedProjects || []).map(p => p.id),
+        ...(memberProjects || []).map(m => m.project_id),
+      ];
+
+      const uniqueProjectIds = [...new Set(allProjectIds)];
+
+      // Get tasks from all projects
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('id, completed')
+        .in('project_id', uniqueProjectIds.length > 0 ? uniqueProjectIds : ['']);
+
+      const completedCount = (tasks || []).filter(t => t.completed).length;
+      const activeCount = (tasks || []).filter(t => !t.completed).length;
+
+      // Calculate unlocked achievements
+      const unlockedAchievements = achievements.filter(a => a.unlocked).length;
+
+      setStats({
+        totalTasks: tasks?.length || 0,
+        completedTasks: completedCount,
+        activeTasks: activeCount,
+        totalProjects: uniqueProjectIds.length,
+        achievements: unlockedAchievements,
+      });
+
+      // Load recent activity
+      await loadRecentActivity(userId, uniqueProjectIds);
+    } catch (error) {
+      console.error('Error loading user stats:', error);
+      // Set default values on error
+      setStats({
+        totalTasks: 0,
+        completedTasks: 0,
+        activeTasks: 0,
+        totalProjects: 0,
+        achievements: 0,
+      });
+    }
+  };
+
+  const loadRecentActivity = async (userId: string, projectIds: string[]) => {
+    try {
+      const activities: RecentActivity[] = [];
+
+      if (projectIds.length === 0) {
+        setRecentActivity([]);
+        return;
+      }
+
+      // Get recently completed tasks
+      const { data: completedTasks } = await supabase
+        .from('tasks')
+        .select('id, name, updated_at, completed')
+        .in('project_id', projectIds)
+        .eq('completed', true)
+        .order('updated_at', { ascending: false })
+        .limit(2);
+
+      if (completedTasks) {
+        completedTasks.forEach(task => {
+          activities.push({
+            id: task.id,
+            title: `Completed "${task.name}"`,
+            time: formatRelativeTime(task.updated_at),
+            icon: 'checkmark.circle.fill',
+            type: 'task',
+          });
+        });
+      }
+
+      // Get recently created projects
+      const { data: recentProjects } = await supabase
+        .from('projects')
+        .select('id, name, created_at')
+        .eq('owner_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (recentProjects && recentProjects.length > 0) {
+        const project = recentProjects[0];
+        activities.push({
+          id: project.id,
+          title: `Created new project "${project.name}"`,
+          time: formatRelativeTime(project.created_at),
+          icon: 'plus.circle.fill',
+          type: 'project',
+        });
+      }
+
+      // Sort by most recent (you'd need to store actual timestamps for proper sorting)
+      setRecentActivity(activities.slice(0, 3));
+    } catch (error) {
+      console.error('Error loading recent activity:', error);
+      setRecentActivity([]);
+    }
+  };
+
+  const formatRelativeTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes} ${diffInMinutes === 1 ? 'minute' : 'minutes'} ago`;
+    if (diffInHours < 24) return `${diffInHours} ${diffInHours === 1 ? 'hour' : 'hours'} ago`;
+    if (diffInDays < 7) return `${diffInDays} ${diffInDays === 1 ? 'day' : 'days'} ago`;
+    return date.toLocaleDateString();
   };
 
   const handleSignOut = async () => {
@@ -159,7 +299,7 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await auth.signOut();
+            await supabase.auth.signOut();
             router.replace("/(auth)/landing");
           } catch (error) {
             console.warn("Sign out error:", error);
@@ -175,8 +315,10 @@ export default function ProfileScreen() {
       ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
       : 0;
 
+  const styles = createStyles(colors);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <EditProfileModal
         visible={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -188,12 +330,12 @@ export default function ProfileScreen() {
         }}
       />
 
-      <LinearGradient colors={["#ff6b6b", "#ff8787"]} style={styles.header}>
+      <LinearGradient colors={[colors.primary, "#ff8787"]} style={styles.header}>
         <TouchableOpacity
           style={styles.editButton}
           onPress={() => setShowEditModal(true)}
         >
-          <IconSymbol name="pencil" size={20} color="#fff" />
+          <IconSymbol name="pencil" size={20} color={colors.card} />
         </TouchableOpacity>
 
         <View style={styles.profileImageContainer}>
@@ -204,7 +346,7 @@ export default function ProfileScreen() {
             />
           ) : (
             <View style={styles.profileImagePlaceholder}>
-              <IconSymbol name="person.fill" size={50} color="#fff" />
+              <IconSymbol name="person.fill" size={50} color={colors.card} />
             </View>
           )}
         </View>
@@ -214,13 +356,13 @@ export default function ProfileScreen() {
         <Text style={styles.email}>{user?.email || ""}</Text>
         {profile?.location && (
           <View style={styles.locationBadge}>
-            <IconSymbol name="location.fill" size={14} color="#fff" />
+            <IconSymbol name="location.fill" size={14} color={colors.card} />
             <Text style={styles.locationText}>{profile.location}</Text>
           </View>
         )}
         {user?.emailVerified && (
           <View style={styles.verifiedBadge}>
-            <IconSymbol name="checkmark.circle.fill" size={16} color="#fff" />
+            <IconSymbol name="checkmark.circle.fill" size={16} color={colors.card} />
             <Text style={styles.verifiedText}>Verified</Text>
           </View>
         )}
@@ -235,23 +377,23 @@ export default function ProfileScreen() {
               <IconSymbol
                 name="checkmark.circle.fill"
                 size={24}
-                color="#10b981"
+                color={colors.primary}
               />
               <Text style={styles.statValue}>{stats.completedTasks}</Text>
               <Text style={styles.statLabel}>Completed</Text>
             </View>
             <View style={styles.statCard}>
-              <IconSymbol name="clock.fill" size={24} color="#f59e0b" />
+              <IconSymbol name="clock.fill" size={24} color={colors.primary} />
               <Text style={styles.statValue}>{stats.activeTasks}</Text>
               <Text style={styles.statLabel}>Active</Text>
             </View>
             <View style={styles.statCard}>
-              <IconSymbol name="folder.fill" size={24} color="#3b82f6" />
+              <IconSymbol name="folder.fill" size={24} color={colors.primary} />
               <Text style={styles.statValue}>{stats.totalProjects}</Text>
               <Text style={styles.statLabel}>Projects</Text>
             </View>
             <View style={styles.statCard}>
-              <IconSymbol name="star.fill" size={24} color="#ff6b6b" />
+              <IconSymbol name="star.fill" size={24} color={colors.primary} />
               <Text style={styles.statValue}>{stats.achievements}</Text>
               <Text style={styles.statLabel}>Achievements</Text>
             </View>
@@ -298,7 +440,7 @@ export default function ProfileScreen() {
                   <IconSymbol
                     name={achievement.icon as any}
                     size={28}
-                    color={achievement.unlocked ? "#ff6b6b" : "#9ca3af"}
+                    color={achievement.unlocked ? colors.primary : colors.textSecondary}
                   />
                 </View>
                 <Text
@@ -325,51 +467,34 @@ export default function ProfileScreen() {
         {/* Recent Activity */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <View style={styles.activityIconContainer}>
-                <IconSymbol
-                  name="checkmark.circle.fill"
-                  size={20}
-                  color="#10b981"
-                />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>
-                  Completed "Design Review"
-                </Text>
-                <Text style={styles.activityTime}>2 hours ago</Text>
-              </View>
+          {recentActivity.length > 0 ? (
+            <View style={styles.activityCard}>
+              {recentActivity.map((activity, index) => (
+                <View key={activity.id}>
+                  {index > 0 && <View style={styles.activityDivider} />}
+                  <View style={styles.activityItem}>
+                    <View style={styles.activityIconContainer}>
+                      <IconSymbol
+                        name={activity.icon as any}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityTitle}>
+                        {activity.title}
+                      </Text>
+                      <Text style={styles.activityTime}>{activity.time}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
-
-            <View style={styles.activityDivider} />
-
-            <View style={styles.activityItem}>
-              <View style={styles.activityIconContainer}>
-                <IconSymbol name="plus.circle.fill" size={20} color="#3b82f6" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>
-                  Created new project "Mobile App"
-                </Text>
-                <Text style={styles.activityTime}>5 hours ago</Text>
-              </View>
+          ) : (
+            <View style={styles.activityCard}>
+              <Text style={styles.emptyActivityText}>No recent activity</Text>
             </View>
-
-            <View style={styles.activityDivider} />
-
-            <View style={styles.activityItem}>
-              <View style={styles.activityIconContainer}>
-                <IconSymbol name="star.fill" size={20} color="#f59e0b" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityTitle}>
-                  Earned "Task Master" achievement
-                </Text>
-                <Text style={styles.activityTime}>1 day ago</Text>
-              </View>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Bio */}
@@ -395,10 +520,10 @@ export default function ProfileScreen() {
                   <IconSymbol
                     name="link.circle.fill"
                     size={24}
-                    color="#0077b5"
+                    color={colors.primary}
                   />
                   <Text style={styles.socialLinkText}>LinkedIn</Text>
-                  <IconSymbol name="arrow.up.right" size={16} color="#6b7280" />
+                  <IconSymbol name="arrow.up.right" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
               {profile.github_url && (
@@ -409,10 +534,10 @@ export default function ProfileScreen() {
                   <IconSymbol
                     name="chevron.left.forwardslash.chevron.right"
                     size={24}
-                    color="#333"
+                    color={colors.text}
                   />
                   <Text style={styles.socialLinkText}>GitHub</Text>
-                  <IconSymbol name="arrow.up.right" size={16} color="#6b7280" />
+                  <IconSymbol name="arrow.up.right" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -424,7 +549,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionTitle}>Account Information</Text>
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
-              <IconSymbol name="envelope.fill" size={20} color="#ff6b6b" />
+              <IconSymbol name="envelope.fill" size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email</Text>
                 <Text style={styles.infoValue}>{user?.email || "N/A"}</Text>
@@ -435,7 +560,7 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.divider} />
                 <View style={styles.infoRow}>
-                  <IconSymbol name="phone.fill" size={20} color="#ff6b6b" />
+                  <IconSymbol name="phone.fill" size={20} color={colors.primary} />
                   <View style={styles.infoContent}>
                     <Text style={styles.infoLabel}>Phone</Text>
                     <Text style={styles.infoValue}>{profile.phone_number}</Text>
@@ -447,7 +572,7 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             <View style={styles.infoRow}>
-              <IconSymbol name="person.fill" size={20} color="#ff6b6b" />
+              <IconSymbol name="person.fill" size={20} color={colors.primary} />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Display Name</Text>
                 <Text style={styles.infoValue}>
@@ -466,7 +591,7 @@ export default function ProfileScreen() {
                     : "xmark.seal.fill"
                 }
                 size={20}
-                color={user?.emailVerified ? "#10b981" : "#ef4444"}
+                color={user?.emailVerified ? colors.success : colors.error}
               />
               <View style={styles.infoContent}>
                 <Text style={styles.infoLabel}>Email Status</Text>
@@ -474,7 +599,7 @@ export default function ProfileScreen() {
                   style={[
                     styles.infoValue,
                     {
-                      color: user?.emailVerified ? "#10b981" : "#ef4444",
+                      color: user?.emailVerified ? colors.success : colors.error,
                     },
                   ]}
                 >
@@ -489,37 +614,48 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
 
+          <View style={styles.menuItem}>
+            <IconSymbol name="moon.fill" size={20} color={colors.textSecondary} />
+            <Text style={styles.menuText}>Dark Mode</Text>
+            <Switch
+              value={theme === 'dark'}
+              onValueChange={toggleTheme}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.card}
+            />
+          </View>
+
           <TouchableOpacity style={styles.menuItem}>
-            <IconSymbol name="bell.fill" size={20} color="#6b7280" />
+            <IconSymbol name="bell.fill" size={20} color={colors.textSecondary} />
             <Text style={styles.menuText}>Notifications</Text>
-            <IconSymbol name="chevron.right" size={20} color="#d1d5db" />
+            <IconSymbol name="chevron.right" size={20} color={colors.border} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <IconSymbol name="lock.fill" size={20} color="#6b7280" />
+            <IconSymbol name="lock.fill" size={20} color={colors.textSecondary} />
             <Text style={styles.menuText}>Privacy & Security</Text>
-            <IconSymbol name="chevron.right" size={20} color="#d1d5db" />
+            <IconSymbol name="chevron.right" size={20} color={colors.border} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
             <IconSymbol
               name="questionmark.circle.fill"
               size={20}
-              color="#6b7280"
+              color={colors.textSecondary}
             />
             <Text style={styles.menuText}>Help & Support</Text>
-            <IconSymbol name="chevron.right" size={20} color="#d1d5db" />
+            <IconSymbol name="chevron.right" size={20} color={colors.border} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <IconSymbol name="info.circle.fill" size={20} color="#6b7280" />
+            <IconSymbol name="info.circle.fill" size={20} color={colors.textSecondary} />
             <Text style={styles.menuText}>About</Text>
-            <IconSymbol name="chevron.right" size={20} color="#d1d5db" />
+            <IconSymbol name="chevron.right" size={20} color={colors.border} />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <IconSymbol name="arrow.right.square.fill" size={20} color="#fff" />
+          <IconSymbol name="arrow.right.square.fill" size={20} color={colors.card} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
@@ -529,10 +665,9 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
   },
   header: {
     paddingTop: 60,
@@ -622,7 +757,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#1f2937",
+    color: colors.text,
     marginBottom: 12,
   },
   statsGrid: {
@@ -633,7 +768,7 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     minWidth: "45%",
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
@@ -646,16 +781,16 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#1f2937",
+    color: colors.text,
     marginTop: 8,
   },
   statLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: colors.textSecondary,
     marginTop: 4,
   },
   progressCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     shadowColor: "#000",
@@ -673,28 +808,28 @@ const styles = StyleSheet.create({
   progressTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.text,
   },
   progressPercentage: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#ff6b6b",
+    color: colors.primary,
   },
   progressBarContainer: {
     height: 8,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.border,
     borderRadius: 4,
     overflow: "hidden",
     marginBottom: 8,
   },
   progressBar: {
     height: "100%",
-    backgroundColor: "#ff6b6b",
+    backgroundColor: colors.primary,
     borderRadius: 4,
   },
   progressSubtext: {
     fontSize: 12,
-    color: "#6b7280",
+    color: colors.textSecondary,
   },
   achievementsGrid: {
     flexDirection: "row",
@@ -704,7 +839,7 @@ const styles = StyleSheet.create({
   achievementCard: {
     flex: 1,
     minWidth: "45%",
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
@@ -721,37 +856,37 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#fff5f5",
+    backgroundColor: colors.primary + "20", // 20% opacity
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   achievementIconLocked: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: colors.border,
   },
   achievementTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#1f2937",
+    color: colors.text,
     textAlign: "center",
     marginBottom: 4,
   },
   achievementTitleLocked: {
-    color: "#9ca3af",
+    color: colors.textSecondary,
   },
   achievementDescription: {
     fontSize: 11,
-    color: "#6b7280",
+    color: colors.textSecondary,
     textAlign: "center",
     marginBottom: 4,
   },
   achievementDate: {
     fontSize: 10,
-    color: "#10b981",
+    color: colors.primary,
     marginTop: 4,
   },
   activityCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     shadowColor: "#000",
@@ -769,7 +904,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#f9fafb",
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -779,20 +914,26 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.text,
     marginBottom: 2,
   },
   activityTime: {
     fontSize: 12,
-    color: "#6b7280",
+    color: colors.textSecondary,
   },
   activityDivider: {
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.border,
     marginVertical: 12,
   },
+  emptyActivityText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
   infoCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     shadowColor: "#000",
@@ -811,23 +952,23 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 12,
-    color: "#6b7280",
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   infoValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#1f2937",
+    color: colors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.border,
     marginVertical: 16,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -843,19 +984,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "500",
-    color: "#1f2937",
+    color: colors.text,
   },
   signOutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ff6b6b",
+    backgroundColor: colors.primary,
     paddingVertical: 16,
     marginHorizontal: 20,
     marginTop: 32,
     borderRadius: 12,
     gap: 8,
-    shadowColor: "#ff6b6b",
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -869,12 +1010,12 @@ const styles = StyleSheet.create({
   version: {
     textAlign: "center",
     fontSize: 12,
-    color: "#9ca3af",
+    color: colors.textSecondary,
     marginTop: 24,
     marginBottom: 40,
   },
   bioCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     shadowColor: "#000",
@@ -885,11 +1026,11 @@ const styles = StyleSheet.create({
   },
   bioText: {
     fontSize: 14,
-    color: "#4b5563",
+    color: colors.textSecondary,
     lineHeight: 22,
   },
   socialLinksCard: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 8,
     shadowColor: "#000",
@@ -909,6 +1050,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: "500",
-    color: "#1f2937",
+    color: colors.text,
   },
 });

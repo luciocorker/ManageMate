@@ -3,12 +3,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
@@ -43,10 +44,11 @@ export default function LandingScreen() {
       >
         <View style={styles.heroContent}>
           <View style={styles.logoContainer}>
-            <View style={styles.logo}>
-              <IconSymbol name="checkmark.circle.fill" size={40} color="#fff" />
-            </View>
-            <Text style={styles.logoText}>ManageMate</Text>
+            <Image
+              source={require("@/assets/images/managemate-logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
 
           <Text style={styles.heroTitle}>
@@ -245,23 +247,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logoContainer: {
-    flexDirection: "row",
     alignItems: "center",
     marginBottom: 30,
   },
-  logo: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#fff",
+  logoImage: {
+    width: 120,
+    height: 120,
   },
   heroTitle: {
     fontSize: 36,

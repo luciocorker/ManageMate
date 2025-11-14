@@ -1,16 +1,20 @@
+import { Channel, getChannelMembers, User } from "@/lib/messagingService";
+import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
@@ -60,20 +64,42 @@ const UsersIcon = () => (
   </Svg>
 );
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
-
 interface ChannelDetailProps {
   channel: Channel;
   onBack: () => void;
 }
 
 export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
+  const router = useRouter();
+  const [members, setMembers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
+
+  const loadMembers = async () => {
+    try {
+      setLoading(true);
+      const membersData = await getChannelMembers(channel.id);
+      setMembers(membersData);
+    } catch (error) {
+      console.error('Error loading members:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id]);
+
+  const handleOpenChat = () => {
+    router.push(`/(tabs)/channel/${channel.id}` as any);
+  };
+
+  const getAvatarColor = (name: string) => {
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % avatarColors.length;
+    return avatarColors[index];
+  };
 
   // Swipe gesture animations
   const translateX = useSharedValue(0);
@@ -107,10 +133,11 @@ export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
   }));
 
   return (
-    <GestureDetector gesture={panGesture}>
-      <Animated.View style={[styles.container, animatedStyle]}>
-        {/* Header */}
-        <View style={styles.header}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={[styles.container, animatedStyle]}>
+          {/* Header */}
+          <View style={styles.header}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <BackIcon />
           </TouchableOpacity>
@@ -124,43 +151,61 @@ export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
               <UsersIcon />
             </View>
             <Text style={styles.channelName}>{channel.name}</Text>
-            <Text style={styles.memberCount}>{channel.members} members</Text>
+            <Text style={styles.memberCount}>
+              {channel.member_count || members.length} members
+              {channel.project_id && ' • Project Channel'}
+            </Text>
+            {channel.description && (
+              <Text style={styles.channelDescription}>{channel.description}</Text>
+            )}
           </View>
 
           {/* Members List */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Members</Text>
-            <View style={styles.membersList}>
-              {channel.memberNames?.map((memberName, index) => (
-                <View key={index} style={styles.memberItem}>
-                  <View
-                    style={[
-                      styles.memberAvatar,
-                      {
-                        backgroundColor:
-                          avatarColors[index % avatarColors.length],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.memberAvatarText}>
-                      {memberName.charAt(0)}
-                    </Text>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#DC2626" />
+              </View>
+            ) : (
+              <View style={styles.membersList}>
+                {members.map((member, index) => (
+                  <View key={member.id} style={styles.memberItem}>
+                    <View
+                      style={[
+                        styles.memberAvatar,
+                        {
+                          backgroundColor: getAvatarColor(member.full_name),
+                        },
+                      ]}
+                    >
+                      <Text style={styles.memberAvatarText}>
+                        {member.full_name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>{member.full_name}</Text>
+                      <Text style={styles.memberEmail}>{member.email}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.memberName}>{memberName}</Text>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Channel Actions */}
           <View style={styles.section}>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={handleOpenChat}
+            >
               <Text style={styles.actionButtonText}>Open Channel Chat</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </Animated.View>
     </GestureDetector>
+    </GestureHandlerRootView>
   );
 }
 
@@ -217,6 +262,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#999",
   },
+  channelDescription: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 8,
+    textAlign: "center",
+  },
   section: {
     paddingHorizontal: 20,
     paddingVertical: 24,
@@ -254,6 +305,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "white",
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberEmail: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 2,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
   },
   actionButton: {
     backgroundColor: "#DC2626",

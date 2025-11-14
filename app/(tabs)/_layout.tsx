@@ -3,13 +3,16 @@ import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { TabIconWithBadge } from '@/components/tab-icon-with-badge';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useMessaging } from '@/contexts/MessagingContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [isNavbarVisible, setIsNavbarVisible] = useState(true);
+  const { unreadCount } = useMessaging();
 
   const toggleNavbar = () => {
     setIsNavbarVisible(!isNavbarVisible);
@@ -46,6 +49,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="channel/[id]"
+        options={{
+          href: null, // This hides the channel routes from the tab bar
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
@@ -56,7 +65,14 @@ export default function TabLayout() {
         name="messaging"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="message.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <TabIconWithBadge 
+              size={28} 
+              name="message.fill" 
+              color={color}
+              badgeCount={unreadCount}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -90,7 +106,7 @@ export default function TabLayout() {
           <IconSymbol 
             size={24} 
             name='chevron.up' 
-            color={colorScheme === 'dark' ? '#000' : '#fff'}
+            color='#FFFFFF'
           />
         </View>
       </TouchableOpacity>

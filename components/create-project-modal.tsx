@@ -2,9 +2,11 @@ import { DatePickerModal } from '@/components/date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useTheme } from '@/contexts/ThemeContext';
+import { searchUsers } from '@/lib/supabaseService';
 import { ProjectPriority, ProjectStatus } from '@/types/project';
 import { useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface CreateProjectModalProps {
   visible: boolean;
@@ -19,32 +21,47 @@ export interface ProjectFormData {
   priority: ProjectPriority;
   deadline: string;
   budget: string;
-  team: string[];
+  team: { id: string; name: string; email: string; avatar_url: string | null }[];
 }
 
 export function CreateProjectModal({ visible, onClose, onCreateProject }: CreateProjectModalProps) {
+  const { colors } = useTheme();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<ProjectStatus>('Planning');
   const [priority, setPriority] = useState<ProjectPriority>('Medium');
   const [deadline, setDeadline] = useState('');
   const [budget, setBudget] = useState('');
-  const [teamMember, setTeamMember] = useState('');
-  const [team, setTeam] = useState<string[]>([]);
+  const [teamMemberSearch, setTeamMemberSearch] = useState('');
+  const [team, setTeam] = useState<{ id: string; name: string; email: string; avatar_url: string | null }[]>([]);
+  const [searchResults, setSearchResults] = useState<{ id: string; name: string; email: string; avatar_url: string | null }[]>([]);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const statuses: ProjectStatus[] = ['Planning', 'In Progress', 'Review', 'Testing', 'Completed', 'Paused', 'Archived'];
   const priorities: ProjectPriority[] = ['Low', 'Medium', 'High', 'Critical'];
 
-  const handleAddTeamMember = () => {
-    if (teamMember.trim()) {
-      setTeam([...team, teamMember.trim()]);
-      setTeamMember('');
+  const handleSearchUsers = async (query: string) => {
+    setTeamMemberSearch(query);
+    if (query.trim().length >= 2) {
+      const results = await searchUsers(query);
+      // Filter out already added team members
+      const filtered = results.filter(user => !team.some(member => member.id === user.id));
+      setSearchResults(filtered);
+    } else {
+      setSearchResults([]);
     }
   };
 
-  const handleRemoveTeamMember = (index: number) => {
-    setTeam(team.filter((_, i) => i !== index));
+  const handleAddTeamMember = (user: { id: string; name: string; email: string; avatar_url: string | null }) => {
+    if (!team.some(member => member.id === user.id)) {
+      setTeam([...team, user]);
+      setTeamMemberSearch('');
+      setSearchResults([]);
+    }
+  };
+
+  const handleRemoveTeamMember = (userId: string) => {
+    setTeam(team.filter(member => member.id !== userId));
   };
 
   const handleCreate = () => {
@@ -71,8 +88,11 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
     setDeadline('');
     setBudget('');
     setTeam([]);
-    setTeamMember('');
+    setTeamMemberSearch('');
+    setSearchResults([]);
   };
+
+  const styles = createStyles(colors);
 
   return (
     <Modal
@@ -82,12 +102,12 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <ThemedView style={styles.modal} lightColor="#1e1e1e" darkColor="#1e1e1e">
+        <ThemedView style={styles.modal} lightColor={colors.card} darkColor={colors.card}>
           {/* Header */}
           <View style={styles.header}>
             <ThemedText style={styles.title}>Create New Project</ThemedText>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <IconSymbol name="xmark" size={24} color="#999" />
+              <IconSymbol name="xmark" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -98,7 +118,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               <TextInput
                 style={styles.input}
                 placeholder="Enter project name"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSecondary}
                 value={name}
                 onChangeText={setName}
               />
@@ -110,7 +130,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Enter project description"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSecondary}
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -161,7 +181,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                 style={styles.datePickerButton}
                 onPress={() => setShowDatePicker(true)}
               >
-                <IconSymbol name="calendar" size={20} color="#999" />
+                <IconSymbol name="calendar" size={20} color={colors.textSecondary} />
                 <ThemedText style={styles.datePickerText}>
                   {deadline || 'Select Deadline'}
                 </ThemedText>
@@ -173,7 +193,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
                     }}
                     style={styles.clearDateButton}
                   >
-                    <IconSymbol name="xmark" size={16} color="#999" />
+                    <IconSymbol name="xmark" size={16} color={colors.textSecondary} />
                   </TouchableOpacity>
                 )}
               </TouchableOpacity>
@@ -185,7 +205,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               <TextInput
                 style={styles.input}
                 placeholder="50000"
-                placeholderTextColor="#999"
+                placeholderTextColor={colors.textSecondary}
                 value={budget}
                 onChangeText={setBudget}
                 keyboardType="numeric"
@@ -198,26 +218,68 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
               <View style={styles.teamInputContainer}>
                 <TextInput
                   style={[styles.input, styles.teamInput]}
-                  placeholder="Add team member name"
-                  placeholderTextColor="#999"
-                  value={teamMember}
-                  onChangeText={setTeamMember}
-                  onSubmitEditing={handleAddTeamMember}
+                  placeholder="Search users by name..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={teamMemberSearch}
+                  onChangeText={handleSearchUsers}
                 />
-                <TouchableOpacity style={styles.addButton} onPress={handleAddTeamMember}>
-                  <IconSymbol name="plus" size={20} color="#fff" />
-                </TouchableOpacity>
               </View>
-              <View style={styles.teamList}>
-                {team.map((member, index) => (
-                  <View key={index} style={styles.teamMemberChip}>
-                    <ThemedText style={styles.teamMemberText}>{member}</ThemedText>
-                    <TouchableOpacity onPress={() => handleRemoveTeamMember(index)}>
-                      <IconSymbol name="xmark" size={16} color="#999" />
+              
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <View style={styles.searchResults}>
+                  {searchResults.map((user) => (
+                    <TouchableOpacity
+                      key={user.id}
+                      style={styles.searchResultItem}
+                      onPress={() => handleAddTeamMember(user)}
+                    >
+                      {user.avatar_url ? (
+                        <Image
+                          source={{ uri: user.avatar_url }}
+                          style={styles.searchResultAvatar}
+                        />
+                      ) : (
+                        <View style={styles.searchResultAvatarPlaceholder}>
+                          <IconSymbol name="person.fill" size={20} color={colors.primary} />
+                        </View>
+                      )}
+                      <View style={styles.searchResultInfo}>
+                        <ThemedText style={styles.searchResultName}>{user.name}</ThemedText>
+                        <ThemedText style={styles.searchResultEmail}>{user.email}</ThemedText>
+                      </View>
+                      <IconSymbol name="plus.circle.fill" size={24} color={colors.primary} />
                     </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
+              
+              {/* Selected Team Members */}
+              {team.length > 0 && (
+                <View style={styles.teamList}>
+                  {team.map((member) => (
+                    <View key={member.id} style={styles.teamMemberChip}>
+                      {member.avatar_url ? (
+                        <Image
+                          source={{ uri: member.avatar_url }}
+                          style={styles.teamMemberAvatar}
+                        />
+                      ) : (
+                        <View style={styles.teamMemberAvatarPlaceholder}>
+                          <IconSymbol name="person.fill" size={16} color={colors.primary} />
+                        </View>
+                      )}
+                      <View style={styles.teamMemberInfo}>
+                        <ThemedText style={styles.teamMemberText}>{member.name}</ThemedText>
+                        <ThemedText style={styles.teamMemberEmail}>{member.email}</ThemedText>
+                      </View>
+                      <TouchableOpacity onPress={() => handleRemoveTeamMember(member.id)}>
+                        <IconSymbol name="xmark.circle.fill" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           </ScrollView>
 
@@ -244,7 +306,7 @@ export function CreateProjectModal({ visible, onClose, onCreateProject }: Create
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -261,12 +323,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: 'white',
+    color: colors.text,
   },
   closeButton: {
     padding: 4,
@@ -281,21 +343,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
-    color: 'white',
+    color: colors.text,
   },
   input: {
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: 'white',
+    color: colors.text,
   },
   datePickerButton: {
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     flexDirection: 'row',
@@ -304,7 +366,7 @@ const styles = StyleSheet.create({
   },
   datePickerText: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textSecondary,
     flex: 1,
   },
   clearDateButton: {
@@ -326,21 +388,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     marginRight: 8,
   },
   optionButtonActive: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   optionText: {
     fontSize: 14,
-    color: '#999',
+    color: colors.textSecondary,
   },
   optionTextActive: {
-    color: 'white',
+    color: colors.card,
     fontWeight: '600',
   },
   teamInputContainer: {
@@ -350,8 +412,52 @@ const styles = StyleSheet.create({
   teamInput: {
     flex: 1,
   },
+  searchResults: {
+    marginTop: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    maxHeight: 200,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 12,
+  },
+  searchResultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.border,
+  },
+  searchResultAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchResultInfo: {
+    flex: 1,
+  },
+  searchResultName: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  searchResultEmail: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   addButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     width: 44,
     height: 44,
     borderRadius: 8,
@@ -359,57 +465,79 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   teamList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 8,
     marginTop: 12,
   },
   teamMemberChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 8,
+    paddingVertical: 8,
+    gap: 12,
+  },
+  teamMemberAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.border,
+  },
+  teamMemberAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamMemberInfo: {
+    flex: 1,
   },
   teamMemberText: {
     fontSize: 14,
-    color: 'white',
+    color: colors.text,
+    fontWeight: '600',
+  },
+  teamMemberEmail: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   footer: {
     flexDirection: 'row',
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
+    borderTopColor: colors.border,
     gap: 12,
   },
   cancelButton: {
     flex: 1,
     padding: 16,
     borderRadius: 8,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#999',
+    color: colors.textSecondary,
   },
   createButton: {
     flex: 1,
     padding: 16,
     borderRadius: 8,
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     alignItems: 'center',
   },
   createButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
+    color: colors.card,
   },
 });

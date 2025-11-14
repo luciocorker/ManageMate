@@ -1,19 +1,41 @@
 import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-// Custom storage adapter for React Native using expo-secure-store
+// Custom storage adapter that works on both native and web
 const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => {
+  getItem: async (key: string) => {
+    if (Platform.OS === 'web') {
+      // Use localStorage on web
+      if (typeof window !== 'undefined') {
+        return window.localStorage.getItem(key);
+      }
+      return null;
+    }
     return SecureStore.getItemAsync(key);
   },
-  setItem: (key: string, value: string) => {
+  setItem: async (key: string, value: string) => {
+    if (Platform.OS === 'web') {
+      // Use localStorage on web
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(key, value);
+      }
+      return;
+    }
     SecureStore.setItemAsync(key, value);
   },
-  removeItem: (key: string) => {
+  removeItem: async (key: string) => {
+    if (Platform.OS === 'web') {
+      // Use localStorage on web
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(key);
+      }
+      return;
+    }
     SecureStore.deleteItemAsync(key);
   },
 };

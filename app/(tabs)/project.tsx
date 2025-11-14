@@ -4,6 +4,7 @@ import { ProjectCard } from '@/components/project-card';
 import { ThemedAlert } from '@/components/themed-alert';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useTheme } from '@/contexts/ThemeContext';
 import {
     createProject,
     deleteProject,
@@ -33,6 +34,7 @@ interface AlertConfig {
 
 export default function ProjectScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +128,7 @@ export default function ProjectScreen() {
   };
 
   const filteredProjects = getFilteredAndSortedProjects();
+  const styles = createStyles(colors);
 
   // Show loading state
   if (loading) {
@@ -133,15 +136,15 @@ export default function ProjectScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.searchIconButton} disabled>
-            <IconSymbol name="magnifyingglass" size={24} color="#999" />
+            <IconSymbol name="magnifyingglass" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
           <ThemedText type="title" style={styles.title}>Projects</ThemedText>
           <TouchableOpacity style={styles.addButton} disabled>
-            <IconSymbol name="plus" size={24} color="#fff" />
+            <IconSymbol name="plus" size={24} color={colors.card} />
           </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <ThemedText style={styles.loadingText}>Loading projects...</ThemedText>
         </View>
       </View>
@@ -182,7 +185,7 @@ export default function ProjectScreen() {
         deadline: project.deadline,
         budget: project.budget?.toString(),
         color: project.color,
-        teamMembers: project.team,
+        teamMembers: [], // Empty array for duplicated project
       });
       await loadProjects();
       setAlert({
@@ -347,29 +350,29 @@ export default function ProjectScreen() {
           style={styles.searchIconButton} 
           onPress={() => setShowSearchBar(!showSearchBar)}
         >
-          <IconSymbol name={showSearchBar ? "xmark" : "magnifyingglass"} size={24} color="#fff" />
+          <IconSymbol name={showSearchBar ? "xmark" : "magnifyingglass"} size={24} color={colors.text} />
         </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>Projects</ThemedText>
         <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-          <IconSymbol name="plus" size={24} color="#fff" />
+          <IconSymbol name="plus" size={24} color={colors.card} />
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
       {showSearchBar && (
         <View style={styles.searchContainer}>
-          <IconSymbol name="magnifyingglass" size={20} color="#999" />
+          <IconSymbol name="magnifyingglass" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search projects..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoFocus
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <IconSymbol name="xmark" size={20} color="#999" />
+              <IconSymbol name="xmark" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -382,12 +385,12 @@ export default function ProjectScreen() {
           <TouchableOpacity 
             style={[
               styles.filterButton, 
-              statusFilter !== 'All' && { backgroundColor: '#DC2626', borderColor: '#DC2626' }
+              statusFilter !== 'All' && { backgroundColor: colors.primary, borderColor: colors.primary }
             ]}
             onPress={() => setStatusFilter(statusFilter === 'All' ? 'In Progress' : 'All')}
           >
-            <IconSymbol name="line.3.horizontal.decrease" size={16} color={statusFilter !== 'All' ? '#fff' : '#999'} />
-            <ThemedText style={[styles.filterText, statusFilter !== 'All' && { color: '#fff' }]}>
+            <IconSymbol name="line.3.horizontal.decrease" size={16} color={statusFilter !== 'All' ? colors.card : colors.textSecondary} />
+            <ThemedText style={[styles.filterText, statusFilter !== 'All' && { color: colors.card }]}>
               {statusFilter}
             </ThemedText>
           </TouchableOpacity>
@@ -396,11 +399,11 @@ export default function ProjectScreen() {
           <TouchableOpacity 
             style={[
               styles.filterButton, 
-              priorityFilter !== 'All' && { backgroundColor: '#DC2626', borderColor: '#DC2626' }
+              priorityFilter !== 'All' && { backgroundColor: colors.primary, borderColor: colors.primary }
             ]}
             onPress={() => setPriorityFilter(priorityFilter === 'All' ? 'High' : 'All')}
           >
-            <ThemedText style={[styles.filterText, priorityFilter !== 'All' && { color: '#fff' }]}>
+            <ThemedText style={[styles.filterText, priorityFilter !== 'All' && { color: colors.card }]}>
               {priorityFilter === 'All' ? 'Priority' : priorityFilter}
             </ThemedText>
           </TouchableOpacity>
@@ -414,7 +417,7 @@ export default function ProjectScreen() {
               setSortBy(options[(currentIndex + 1) % options.length]);
             }}
           >
-            <IconSymbol name="arrow.up.arrow.down" size={16} color="#999" />
+            <IconSymbol name="arrow.up.arrow.down" size={16} color={colors.textSecondary} />
             <ThemedText style={styles.filterText}>
               {sortBy.charAt(0).toUpperCase() + sortBy.slice(1)}
             </ThemedText>
@@ -427,14 +430,14 @@ export default function ProjectScreen() {
             <IconSymbol 
               name="square.grid.2x2" 
               size={22} 
-              color={viewMode === 'grid' ? '#DC2626' : '#999'} 
+              color={viewMode === 'grid' ? colors.primary : colors.textSecondary} 
             />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setViewMode('list')}>
             <IconSymbol 
               name="list.bullet" 
               size={22} 
-              color={viewMode === 'list' ? '#DC2626' : '#999'} 
+              color={viewMode === 'list' ? colors.primary : colors.textSecondary} 
             />
           </TouchableOpacity>
         </View>
@@ -507,10 +510,10 @@ export default function ProjectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -519,9 +522,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#121212',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
   searchIconButton: {
     width: 40,
@@ -529,18 +532,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
   },
   title: {
     flex: 1,
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.text,
     textAlign: 'center',
     marginHorizontal: 12,
   },
   addButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -556,15 +559,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     gap: 8,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: 'white',
+    color: colors.text,
   },
   controls: {
     flexDirection: 'row',
@@ -583,14 +586,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     marginRight: 8,
     gap: 4,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: colors.card,
   },
   filterText: {
     fontSize: 14,
-    color: 'white',
+    color: colors.text,
   },
   viewToggle: {
     flexDirection: 'row',
@@ -609,13 +612,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
-    color: 'white',
+    color: colors.text,
   },
   emptySubtext: {
     fontSize: 14,
     opacity: 0.6,
     textAlign: 'center',
-    color: '#999',
+    color: colors.textSecondary,
   },
   loadingContainer: {
     flex: 1,
@@ -625,6 +628,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#999',
+    color: colors.textSecondary,
   },
 });
