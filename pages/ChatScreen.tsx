@@ -79,10 +79,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
 
   // Set chat screen flag
   useEffect(() => {
-    console.log('ChatScreen mounted - setting isInChatScreen to true');
     setIsInChatScreen(true);
     return () => {
-      console.log('ChatScreen unmounted - setting isInChatScreen to false');
       setIsInChatScreen(false);
     };
   }, [setIsInChatScreen]);

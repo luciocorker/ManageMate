@@ -10,7 +10,6 @@ export default function Index() {
     // Check current session
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      console.log("Initial auth check:", !!session);
       setIsAuthenticated(!!session);
     };
     

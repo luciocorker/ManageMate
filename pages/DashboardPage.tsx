@@ -70,12 +70,6 @@ export default function DashboardPage() {
         getProjectsWithTasks(),
       ]);
 
-      console.log("Dashboard Data Loaded:");
-      console.log("Stats:", statsData);
-      console.log("Activities:", activitiesData);
-      console.log("Upcoming Tasks:", tasksData);
-      console.log("Projects:", projectsData);
-
       setStats(statsData);
       setActivities(activitiesData);
       setUpcomingTasks(tasksData);

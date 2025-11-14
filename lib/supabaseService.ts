@@ -578,7 +578,6 @@ export async function getRecentActivity() {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      console.log('No user found for recent activity');
       return [];
     }
 
@@ -600,10 +599,7 @@ export async function getRecentActivity() {
 
     const uniqueProjectIds = [...new Set(allProjectIds)];
 
-    console.log('Recent Activity - Project IDs:', uniqueProjectIds);
-
     if (uniqueProjectIds.length === 0) {
-      console.log('No projects found for recent activity');
       return [];
     }
 
@@ -618,8 +614,6 @@ export async function getRecentActivity() {
     if (projectsError) {
       console.error('Error fetching recent projects:', projectsError);
     }
-
-    console.log('Recent projects:', recentProjects);
 
     // Get recent tasks from these projects
     const { data: recentTasks, error: tasksError } = await supabase
@@ -640,8 +634,6 @@ export async function getRecentActivity() {
     if (tasksError) {
       console.error('Error fetching recent tasks:', tasksError);
     }
-
-    console.log('Recent tasks:', recentTasks);
 
     // Combine and sort by updated_at
     const activities = [
@@ -679,7 +671,6 @@ export async function getUpcomingTasks() {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      console.log('No user found for upcoming tasks');
       return [];
     }
 

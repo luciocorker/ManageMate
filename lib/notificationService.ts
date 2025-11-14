@@ -47,8 +47,6 @@ export async function registerForPushNotificationsAsync() {
     token = (await Notifications.getExpoPushTokenAsync({
       projectId: Constants.expoConfig?.extra?.eas?.projectId,
     })).data;
-    
-    console.log('Push token:', token);
   } else {
     alert('Must use physical device for Push Notifications');
   }
@@ -78,7 +76,6 @@ export async function savePushToken(token: string) {
       });
 
     if (error) throw error;
-    console.log('Push token saved successfully');
   } catch (error) {
     console.error('Error saving push token:', error);
   }
