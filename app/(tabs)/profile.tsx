@@ -117,7 +117,7 @@ export default function ProfileScreen() {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
-      if (session?.user) {
+      if (session?.user && session.user.id) {
         loadUserProfile(session.user.id);
         loadUserStats(session.user.id);
       }
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
-      if (session?.user) {
+      if (session?.user && session.user.id) {
         loadUserProfile(session.user.id);
         loadUserStats(session.user.id);
       }
@@ -324,7 +324,7 @@ export default function ProfileScreen() {
         onClose={() => setShowEditModal(false)}
         onSave={() => {
           // Reload profile after save
-          if (user) {
+          if (user && user.uid) {
             loadUserProfile(user.uid);
           }
         }}
