@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Project } from '@/types/project';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -13,29 +13,39 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }: ProjectCardProps) {
-  const iconColor = useThemeColor({}, 'icon');
+  const { colors } = useTheme();
+  const iconColor = colors.textSecondary;
   
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Planning': return '#6b7280';
-      case 'In Progress': return '#3b82f6';
-      case 'Review': return '#f59e0b';
-      case 'Testing': return '#8b5cf6';
-      case 'Completed': return '#10b981';
-      case 'Paused': return '#ef4444';
-      case 'Archived': return '#6b7280';
-      default: return '#6b7280';
+      case 'Planning': return colors.border;
+      case 'In Progress': return colors.primary;
+      case 'Review': return colors.primary;
+      case 'Testing': return colors.primary;
+      case 'Completed': return colors.border;
+      case 'Paused': return colors.border;
+      case 'Archived': return colors.border;
+      default: return colors.border;
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'Critical': return '#ef4444';
-      case 'High': return '#f97316';
-      case 'Medium': return '#f59e0b';
-      case 'Low': return '#10b981';
-      default: return '#6b7280';
+      case 'Critical': return colors.primary;
+      case 'High': return colors.primary;
+      case 'Medium': return colors.border;
+      case 'Low': return colors.border;
+      default: return colors.border;
     }
+  };
+
+  const getBadgeTextColor = (bgColor: string) => {
+    // For primary color badges (red), use white text for contrast
+    // For border color badges (gray), use main text color
+    if (bgColor === colors.primary) {
+      return '#FFFFFF'; // Always white on red badges for maximum contrast
+    }
+    return colors.text; // Black in light mode, white in dark mode
   };
 
   const formatDate = (dateString?: string) => {
@@ -56,14 +66,14 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
     <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <ThemedView 
         style={styles.card}
-        lightColor="#f9fafb"
-        darkColor="#1f2937"
+        lightColor={colors.card}
+        darkColor={colors.card}
       >
         {/* Header Row */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={[styles.colorDot, { backgroundColor: project.color }]} />
-            <ThemedText style={styles.projectName} numberOfLines={1}>
+            <View style={[styles.colorDot, { backgroundColor: colors.primary }]} />
+            <ThemedText style={[styles.projectName, { color: colors.text }]} numberOfLines={1}>
               {project.name}
             </ThemedText>
           </View>
@@ -72,7 +82,7 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
               <IconSymbol 
                 name={project.isFavorite ? 'star.fill' : 'star'} 
                 size={20} 
-                color={project.isFavorite ? '#f59e0b' : iconColor} 
+                color={project.isFavorite ? colors.primary : iconColor} 
               />
             </TouchableOpacity>
             <TouchableOpacity onPress={onMenuPress} style={styles.iconButton}>
@@ -83,7 +93,7 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
 
         {/* Description */}
         {project.description && (
-          <ThemedText style={styles.description} numberOfLines={2}>
+          <ThemedText style={[styles.description, { color: colors.text }]} numberOfLines={2}>
             {project.description}
           </ThemedText>
         )}
@@ -91,37 +101,37 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
         {/* Status and Priority Badges */}
         <View style={styles.badges}>
           <View style={[styles.badge, { backgroundColor: getStatusColor(project.status) }]}>
-            <Text style={styles.badgeText}>{project.status}</Text>
+            <Text style={[styles.badgeText, { color: getBadgeTextColor(getStatusColor(project.status)) }]}>{project.status}</Text>
           </View>
           <View style={[styles.badge, { backgroundColor: getPriorityColor(project.priority) }]}>
-            <Text style={styles.badgeText}>{project.priority}</Text>
+            <Text style={[styles.badgeText, { color: getBadgeTextColor(getPriorityColor(project.priority)) }]}>{project.priority}</Text>
           </View>
         </View>
 
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
+          <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
             <View 
               style={[
                 styles.progressFill, 
-                { width: `${project.progress}%`, backgroundColor: project.color }
+                { width: `${project.progress}%`, backgroundColor: colors.primary }
               ]} 
             />
           </View>
-          <ThemedText style={styles.progressText}>{project.progress}%</ThemedText>
+          <ThemedText style={[styles.progressText, { color: colors.text }]}>{project.progress}%</ThemedText>
         </View>
 
         {/* Stats Row */}
         <View style={styles.stats}>
           <View style={styles.stat}>
             <IconSymbol name="checkmark" size={16} color={iconColor} />
-            <ThemedText style={styles.statText}>
+            <ThemedText style={[styles.statText, { color: colors.text }]}>
               {completedTasks}/{totalTasks} tasks
             </ThemedText>
           </View>
           <View style={styles.stat}>
             <IconSymbol name="person.fill" size={16} color={iconColor} />
-            <ThemedText style={styles.statText}>
+            <ThemedText style={[styles.statText, { color: colors.text }]}>
               {project.team.length} members
             </ThemedText>
           </View>
@@ -133,7 +143,8 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
             <IconSymbol name="calendar" size={16} color={iconColor} />
             <ThemedText 
               style={[
-                styles.statText, 
+                styles.statText,
+                { color: colors.text },
                 deadline.isOverdue && styles.overdueText
               ]}
             >
@@ -141,7 +152,7 @@ export function ProjectCard({ project, onPress, onFavoriteToggle, onMenuPress }:
             </ThemedText>
           </View>
           {project.budget && (
-            <ThemedText style={styles.budget}>
+            <ThemedText style={[styles.budget, { color: colors.text }]}>
               ${project.budget.toLocaleString()}
             </ThemedText>
           )}
@@ -207,7 +218,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   badgeText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -220,7 +230,6 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 8,
-    backgroundColor: '#e5e7eb',
     borderRadius: 4,
     overflow: 'hidden',
   },

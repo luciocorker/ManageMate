@@ -3,13 +3,16 @@ import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { TabIconWithBadge } from '@/components/tab-icon-with-badge';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { useMessaging } from '@/contexts/MessagingContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const [isNavbarVisible, setIsNavbarVisible] = useState(true);
+  const { unreadCount, isInChatScreen } = useMessaging();
 
   const toggleNavbar = () => {
     setIsNavbarVisible(!isNavbarVisible);
@@ -23,7 +26,7 @@ export default function TabLayout() {
           headerShown: false,
           tabBarButton: HapticTab,
           tabBarShowLabel: false,
-          tabBarStyle: isNavbarVisible ? undefined : { display: 'none' },
+          tabBarStyle: (isInChatScreen || isNavbarVisible) ? undefined : { display: 'none' },
         }}>
       <Tabs.Screen
         name="dashboard"
@@ -40,6 +43,18 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="project/[id]"
+        options={{
+          href: null, // This hides the route from the tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="channel/[id]"
+        options={{
+          href: null, // This hides the channel routes from the tab bar
+        }}
+      />
+      <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendar',
@@ -50,7 +65,14 @@ export default function TabLayout() {
         name="messaging"
         options={{
           title: 'Messages',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="message.fill" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <TabIconWithBadge 
+              size={28} 
+              name="message.fill" 
+              color={color}
+              badgeCount={unreadCount}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -69,12 +91,9 @@ export default function TabLayout() {
       />
     </Tabs>
     
-    {!isNavbarVisible && (
+    {!isInChatScreen && !isNavbarVisible && (
       <TouchableOpacity 
-        style={[
-          styles.toggleButton,
-          { backgroundColor: Colors[colorScheme ?? 'light'].background }
-        ]} 
+        style={styles.toggleButton} 
         onPress={toggleNavbar}
         activeOpacity={0.8}
       >
@@ -82,19 +101,18 @@ export default function TabLayout() {
           styles.toggleButtonInner,
           { 
             backgroundColor: Colors[colorScheme ?? 'light'].tint,
-            borderColor: Colors[colorScheme ?? 'light'].background
           }
         ]}>
           <IconSymbol 
             size={24} 
             name='chevron.up' 
-            color={colorScheme === 'dark' ? '#000' : '#fff'}
+            color='#FFFFFF'
           />
         </View>
       </TouchableOpacity>
     )}
     
-    {isNavbarVisible && (
+    {!isInChatScreen && isNavbarVisible && (
       <TouchableOpacity 
         style={styles.hideButton} 
         onPress={toggleNavbar}
@@ -120,8 +138,7 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'transparent',
     zIndex: 1000,
   },
   toggleButtonInner: {
@@ -130,7 +147,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
   },
   hideButton: {
     position: 'absolute',

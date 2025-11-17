@@ -1,16 +1,26 @@
-import ProfilePage from "@/pages/ProfilePage";
-import { useState } from "react";
+import { useMessaging } from "@/contexts/MessagingContext";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    DirectMessage,
+    User,
+    getDirectMessages,
+    markMessagesAsRead,
+    sendDirectMessage,
+    subscribeToDirectMessages,
+} from "@/lib/messagingService";
+import { supabase } from "@/lib/supabase";
+import { useEffect, useRef, useState } from "react";
+import {
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 
 // SVG Icons
 const BackIcon = () => (
@@ -37,170 +47,220 @@ const SendIcon = () => (
   </Svg>
 );
 
-const OnlineIndicator = () => (
-  <Svg width="10" height="10" viewBox="0 0 10 10">
-    <Circle
-      cx="5"
-      cy="5"
-      r="4"
-      fill="#00ff00"
-      stroke="#121212"
-      strokeWidth="2"
-    />
-  </Svg>
-);
-
-interface Friend {
-  id: number;
-  name: string;
-  message: string;
-  avatar: string;
-  online: boolean;
-}
-
-interface Message {
-  id: number;
-  text: string;
-  sender: "me" | "them";
-  timestamp: string;
-}
-
 interface ChatScreenProps {
-  friend: Friend;
+  friend: User;
   onBack: () => void;
 }
 
-// Dummy messages
-const DUMMY_MESSAGES: Message[] = [
-  {
-    id: 1,
-    text: "Hey! How are you doing?",
-    sender: "them",
-    timestamp: "10:30 AM",
-  },
-  {
-    id: 2,
-    text: "I'm doing great! Just working on the project.",
-    sender: "me",
-    timestamp: "10:32 AM",
-  },
-  {
-    id: 3,
-    text: "That's awesome! Need any help?",
-    sender: "them",
-    timestamp: "10:33 AM",
-  },
-  {
-    id: 4,
-    text: "Actually yes, could you review my latest changes?",
-    sender: "me",
-    timestamp: "10:35 AM",
-  },
-  {
-    id: 5,
-    text: "Of course! Send them over.",
-    sender: "them",
-    timestamp: "10:36 AM",
-  },
-];
+// Helper to get avatar color from user ID
+const getAvatarColor = (userId: string) => {
+  const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A", "#98D8C8", "#F7DC6F", "#BB8FCE", "#85C1E2"];
+  const index = parseInt(userId.slice(0, 8), 16) % colors.length;
+  return colors[index];
+};
+
+// Helper to format timestamp
+const formatTimestamp = (timestamp: string) => {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
-  const [messages, setMessages] = useState<Message[]>(DUMMY_MESSAGES);
+  const { refreshUnreadCount, setIsInChatScreen } = useMessaging();
+  const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [inputText, setInputText] = useState("");
-  const [showProfile, setShowProfile] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
 
-  // If profile is open, show ProfilePage
-  if (showProfile) {
-    return <ProfilePage friend={friend} onBack={() => setShowProfile(false)} />;
-  }
+  // Set chat screen flag
+  useEffect(() => {
+    setIsInChatScreen(true);
+    return () => {
+      setIsInChatScreen(false);
+    };
+  }, [setIsInChatScreen]);
 
-  const handleSend = () => {
-    if (inputText.trim()) {
-      const newMessage: Message = {
-        id: messages.length + 1,
-        text: inputText,
-        sender: "me",
-        timestamp: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+  // Get current user ID
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+      }
+    };
+    getCurrentUser();
+  }, []);
+
+  // Load messages and mark as read
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const loadMessages = async () => {
+      setLoading(true);
+      const msgs = await getDirectMessages(friend.id);
+      setMessages(msgs);
+      setLoading(false);
+      
+      // Mark messages from this friend as read
+      await markMessagesAsRead(friend.id);
+      // Refresh the badge count
+      await refreshUnreadCount();
+      
+      // Scroll to bottom after loading
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 100);
+    };
+
+    loadMessages();
+
+    // Subscribe to new messages
+    const subscription = subscribeToDirectMessages((newMessage) => {
+      // Only add messages between current user and this friend
+      if (
+        (newMessage.sender_id === friend.id && newMessage.receiver_id === currentUserId) ||
+        (newMessage.sender_id === currentUserId && newMessage.receiver_id === friend.id)
+      ) {
+        setMessages((prev) => {
+          // Check if message already exists (by real ID)
+          if (prev.find((m) => m.id === newMessage.id)) {
+            return prev;
+          }
+          // Remove temp messages (will be replaced by real ones from DB)
+          const withoutTemp = prev.filter((m) => !m.id.startsWith('temp-'));
+          return [...withoutTemp, newMessage];
+        });
+        
+        // Scroll to bottom when new message arrives
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [friend.id, currentUserId, refreshUnreadCount]);
+
+  const handleSend = async () => {
+    if (inputText.trim() && currentUserId) {
+      const tempMessage: DirectMessage = {
+        id: `temp-${Date.now()}`,
+        sender_id: currentUserId,
+        receiver_id: friend.id,
+        content: inputText.trim(),
+        file_url: null,
+        file_name: null,
+        file_type: null,
+        file_size: null,
+        read: false,
+        created_at: new Date().toISOString(),
       };
-      setMessages([...messages, newMessage]);
+      
+      // Optimistically add message to UI
+      setMessages((prev) => [...prev, tempMessage]);
       setInputText("");
+      
+      // Scroll to bottom
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      // Send to database
+      await sendDirectMessage(friend.id, inputText.trim());
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={0}
-    >
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+      >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <BackIcon />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerInfo}
-          onPress={() => setShowProfile(true)}
-        >
+        <View style={styles.headerInfo}>
           <View
-            style={[styles.headerAvatar, { backgroundColor: friend.avatar }]}
+            style={[styles.headerAvatar, { backgroundColor: getAvatarColor(friend.id) }]}
           >
-            <Text style={styles.headerAvatarText}>{friend.name.charAt(0)}</Text>
+            <Text style={styles.headerAvatarText}>
+              {friend.full_name?.charAt(0) || "?"}
+            </Text>
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerName}>{friend.name}</Text>
-            {friend.online && (
-              <View style={styles.onlineStatus}>
-                <OnlineIndicator />
-                <Text style={styles.onlineText}>Online</Text>
-              </View>
-            )}
+            <Text style={styles.headerName}>{friend.full_name || "Unknown User"}</Text>
+            <Text style={styles.onlineText}>{friend.email}</Text>
           </View>
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* Messages */}
-      <ScrollView
-        style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
-      >
-        {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[
-              styles.messageWrapper,
-              message.sender === "me"
-                ? styles.myMessageWrapper
-                : styles.theirMessageWrapper,
-            ]}
-          >
-            <View
-              style={[
-                styles.messageBubble,
-                message.sender === "me"
-                  ? styles.myMessage
-                  : styles.theirMessage,
-              ]}
-            >
-              <Text style={styles.messageText}>{message.text}</Text>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#DC2626" />
+        </View>
+      ) : (
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+        >
+          {messages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>Start the conversation!</Text>
             </View>
-            <Text style={styles.timestamp}>{message.timestamp}</Text>
-          </View>
-        ))}
-      </ScrollView>
+          ) : (
+            messages.map((message) => {
+              const isMe = message.sender_id === currentUserId;
+              return (
+                <View
+                  key={message.id}
+                  style={[
+                    styles.messageWrapper,
+                    isMe ? styles.myMessageWrapper : styles.theirMessageWrapper,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      isMe ? styles.myMessage : styles.theirMessage,
+                    ]}
+                  >
+                    <Text style={styles.messageText}>{message.content}</Text>
+                  </View>
+                  <Text style={styles.timestamp}>
+                    {formatTimestamp(message.created_at)}
+                  </Text>
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
 
       {/* Input */}
       <View style={styles.inputContainer}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder="Type a message..."
           placeholderTextColor="#666"
           value={inputText}
           onChangeText={setInputText}
           multiline
+          maxLength={1000}
+          blurOnSubmit={false}
         />
         <TouchableOpacity
           style={styles.sendButton}
@@ -210,7 +270,8 @@ export default function ChatScreen({ friend, onBack }: ChatScreenProps) {
           <SendIcon />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -267,7 +328,27 @@ const styles = StyleSheet.create({
   },
   onlineText: {
     fontSize: 12,
-    color: "#00ff00",
+    color: "#999",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#444",
   },
   messagesContainer: {
     flex: 1,
@@ -314,7 +395,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: "#121212",
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",

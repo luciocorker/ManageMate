@@ -1,20 +1,19 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { auth } from "@/lib/firebase";
 import { supabase } from "@/lib/supabase";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import {
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 interface UserProfile {
@@ -57,14 +56,14 @@ export default function EditProfileModal({
   }, [visible]);
 
   const loadProfile = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
       const { data, error } = await supabase
-        .from("users")
+        .from("profiles")
         .select("*")
-        .eq("firebase_uid", user.uid)
+        .eq("id", session.user.id)
         .single();
 
       if (error) throw error;
@@ -77,7 +76,7 @@ export default function EditProfileModal({
           linkedin_url: data.linkedin_url || "",
           github_url: data.github_url || "",
           bio: data.bio || "",
-          profile_picture_url: data.profile_picture_url || "",
+          profile_picture_url: data.avatar_url || "",
         });
       }
     } catch (error) {
@@ -115,12 +114,12 @@ export default function EditProfileModal({
   };
 
   const uploadImage = async (uri: string) => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    setUploading(true);
-
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      setUploading(true);
+
       // For React Native, we need to use ArrayBuffer
       const response = await fetch(uri);
       const arrayBuffer = await response.arrayBuffer();
@@ -128,10 +127,10 @@ export default function EditProfileModal({
 
       // Create file name
       const fileExt = uri.split(".").pop() || "jpg";
-      const fileName = `${user.uid}/${Date.now()}.${fileExt}`;
+      const fileName = `${session.user.id}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("profile-pictures")
         .upload(fileName, fileData, {
           contentType: `image/${fileExt}`,
@@ -158,24 +157,19 @@ export default function EditProfileModal({
   };
 
   const handleSave = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    setLoading(true);
-
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      setLoading(true);
+
       const { error } = await supabase
-        .from("users")
+        .from("profiles")
         .update({
           full_name: profile.full_name,
-          phone_number: profile.phone_number,
-          location: profile.location,
-          linkedin_url: profile.linkedin_url,
-          github_url: profile.github_url,
-          bio: profile.bio,
-          profile_picture_url: profile.profile_picture_url,
+          avatar_url: profile.profile_picture_url,
         })
-        .eq("firebase_uid", user.uid);
+        .eq("id", session.user.id);
 
       if (error) throw error;
 

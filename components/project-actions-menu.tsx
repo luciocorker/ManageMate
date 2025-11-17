@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Project } from '@/types/project';
 import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -38,7 +38,8 @@ export function ProjectActionsMenu({
   onArchive,
   onDelete,
 }: ProjectActionsMenuProps) {
-  const iconColor = useThemeColor({}, 'icon');
+  const { colors } = useTheme();
+  const iconColor = colors.textSecondary;
 
   const actions: ActionItem[] = [
     {
@@ -119,8 +120,8 @@ export function ProjectActionsMenu({
       >
         <ThemedView 
           style={styles.menu}
-          lightColor="#fff"
-          darkColor="#1f2937"
+          lightColor={colors.card}
+          darkColor={colors.card}
         >
           <View style={styles.header}>
             <ThemedText style={styles.title}>{project.name}</ThemedText>
@@ -129,7 +130,7 @@ export function ProjectActionsMenu({
             </TouchableOpacity>
           </View>
           
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
           
           {actions.map((action, index) => {
             if (action.show === false) return null;
@@ -197,7 +198,6 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e7eb',
     opacity: 0.3,
   },
   action: {

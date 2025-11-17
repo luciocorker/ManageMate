@@ -6,10 +6,20 @@ export default {
     slug: "ManageMate",
     version: "1.0.0",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/images/managemate-logo.png",
     scheme: "managemate",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    splash: {
+      image: "./assets/images/managemate-logo.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff"
+    },
+    notification: {
+      icon: "./assets/images/managemate-logo.png",
+      color: "#DC2626",
+      androidMode: "default"
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.managemate.app",
@@ -21,10 +31,8 @@ export default {
     android: {
       package: "com.managemate.app",
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
-        foregroundImage: "./assets/images/android-icon-foreground.png",
-        backgroundImage: "./assets/images/android-icon-background.png",
-        monochromeImage: "./assets/images/android-icon-monochrome.png",
+        backgroundColor: "#FF6464",
+        foregroundImage: "./assets/images/managemate-logo.png",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -44,7 +52,7 @@ export default {
     },
     web: {
       output: "static",
-      favicon: "./assets/images/favicon.png",
+      favicon: "./assets/images/managemate-logo.png",
     },
     plugins: [
       "expo-router",
@@ -52,11 +60,14 @@ export default {
       [
         "expo-splash-screen",
         {
-          image: "./assets/images/splash-icon.png",
-          imageWidth: 200,
+          image: "./assets/images/managemate-logo.png",
+          imageWidth: 250,
           resizeMode: "contain",
           backgroundColor: "#ffffff",
           dark: {
+            image: "./assets/images/managemate-logo.png",
+            imageWidth: 250,
+            resizeMode: "contain",
             backgroundColor: "#000000",
           },
         },
@@ -88,7 +99,7 @@ export default {
       googleIosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
       eas: {
-        projectId: "e002ff13-e314-4d50-82fe-3c0688d95a46",
+        projectId: "933a849e-a941-4a11-9a7a-f8e37408b606",
       },
     },
   },
