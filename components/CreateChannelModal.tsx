@@ -1,3 +1,4 @@
+import type { Friend } from "@/types/messaging";
 import { useState } from "react";
 import {
   Modal,
@@ -35,14 +36,6 @@ const CheckIcon = () => (
   </Svg>
 );
 
-interface Friend {
-  id: number;
-  name: string;
-  message: string;
-  avatar: string;
-  online: boolean;
-}
-
 interface CreateChannelModalProps {
   visible: boolean;
   onClose: () => void;
@@ -57,9 +50,9 @@ export default function CreateChannelModal({
   friends,
 }: CreateChannelModalProps) {
   const [channelName, setChannelName] = useState("");
-  const [selectedFriends, setSelectedFriends] = useState<number[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
 
-  const toggleFriend = (friendId: number) => {
+  const toggleFriend = (friendId: string) => {
     setSelectedFriends((prev) =>
       prev.includes(friendId)
         ? prev.filter((id) => id !== friendId)

@@ -1,33 +1,18 @@
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 import { Redirect } from "expo-router";
-import { onAuthStateChanged } from "firebase/auth";
-import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 export default function Index() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { isAuthenticated, loading } = useAuth();
 
-  useEffect(() => {
-    // Listen to auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
-    });
-
-    // Cleanup subscription
-    return () => unsubscribe();
-  }, []);
-
-  if (isAuthenticated === null) {
+  if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#667eea" />
+        <ActivityIndicator size="large" color="#ff6b6b" />
       </View>
     );
   }
 
-  return isAuthenticated ? (
-    <Redirect href="/(tabs)/dashboard" />
-  ) : (
-    <Redirect href="/(auth)/landing" />
-  );
+  // If authenticated, go to dashboard, otherwise go to landing page
+  return <Redirect href={isAuthenticated ? "/(tabs)/dashboard" : "/(auth)/landing"} />;
 }

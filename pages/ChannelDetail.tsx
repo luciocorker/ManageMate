@@ -1,17 +1,23 @@
+import AddMembersModal from "@/components/AddMembersModal";
+import EditChannelModal from "@/components/EditChannelModal";
+import { useAuth } from "@/contexts/AuthContext";
 import {
+  addChannelMembers,
+  deleteChannel,
+  getChannelMembers,
+  getFriends,
+  updateChannel,
+} from "@/supabase/supabaseClient";
+import type { Channel, Friend } from "@/types/messaging";
+import { useEffect, useState } from "react";
+import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
 // SVG Icons
@@ -60,107 +66,254 @@ const UsersIcon = () => (
   </Svg>
 );
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
-
 interface ChannelDetailProps {
   channel: Channel;
   onBack: () => void;
+  onMembersUpdated?: () => void;
+  onChannelDeleted?: () => void;
 }
 
-export default function ChannelDetail({ channel, onBack }: ChannelDetailProps) {
+export default function ChannelDetail({
+  channel,
+  onBack,
+  onMembersUpdated,
+  onChannelDeleted,
+}: ChannelDetailProps) {
+  const { user } = useAuth();
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [showEditChannelModal, setShowEditChannelModal] = useState(false);
+  const [channelMembers, setChannelMembers] = useState<string[]>(
+    channel.memberNames || []
+  );
+  const [channelName, setChannelName] = useState(channel.name);
+  const [channelDescription, setChannelDescription] = useState(
+    channel.description || ""
+  );
   const avatarColors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"];
 
-  // Swipe gesture animations
-  const translateX = useSharedValue(0);
+  // Load friends when component mounts
+  useEffect(() => {
+    loadFriends();
+    loadChannelMembers();
+  }, [user]);
 
-  const handleSwipeBack = () => {
-    onBack();
-  };
+  async function loadFriends() {
+    if (!user) return;
+    try {
+      const friendsData = await getFriends(user.name);
+      const displayFriends: Friend[] = friendsData.map((f) => ({
+        id: f.id,
+        name: f.friend_id,
+        message: "",
+        avatar: getAvatarColor(f.friend_id),
+        online: Math.random() > 0.5,
+      }));
+      setFriends(displayFriends);
+    } catch (error) {
+      console.error("Error loading friends:", error);
+    }
+  }
 
-  // Pan gesture for swiping right to go back
-  const panGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      // Only allow swiping right (positive X)
-      if (event.translationX > 0) {
-        translateX.value = event.translationX;
+  async function loadChannelMembers() {
+    try {
+      const members = await getChannelMembers(channel.id);
+      setChannelMembers(members);
+    } catch (error) {
+      console.error("Error loading channel members:", error);
+    }
+  }
+
+  async function handleAddMembers(selectedFriends: Friend[]): Promise<boolean> {
+    if (!user) return false;
+
+    try {
+      const friendNames = selectedFriends.map((f) => f.name);
+      const success = await addChannelMembers(
+        channel.id,
+        friendNames,
+        user.name
+      );
+
+      if (success) {
+        // Reload members
+        await loadChannelMembers();
+        // Notify parent to refresh
+        onMembersUpdated?.();
+        return true;
       }
-    })
-    .onEnd((event) => {
-      // If swiped more than 100px, go back
-      if (event.translationX > 100) {
-        translateX.value = withSpring(500, {}, () => {
-          runOnJS(handleSwipeBack)();
-        });
-      } else {
-        // Otherwise snap back
-        translateX.value = withSpring(0);
-      }
-    });
+      return false;
+    } catch (error) {
+      console.error("Error adding members:", error);
+      return false;
+    }
+  }
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
+  function getAvatarColor(name: string) {
+    const index = name.length % avatarColors.length;
+    return avatarColors[index];
+  }
+
+  async function handleEditChannel(
+    name: string,
+    description: string
+  ): Promise<boolean> {
+    try {
+      const success = await updateChannel(channel.id, { name, description });
+
+      if (success) {
+        // Update local state
+        setChannelName(name);
+        setChannelDescription(description);
+        // Notify parent to refresh
+        onMembersUpdated?.();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error editing channel:", error);
+      return false;
+    }
+  }
+
+  function handleDeleteChannel() {
+    // Show confirmation dialog
+    Alert.alert(
+      "Delete Channel",
+      `Are you sure you want to delete "${channel.name}"? This will delete all messages and cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const success = await deleteChannel(channel.id);
+              if (success) {
+                // Notify parent and go back
+                onChannelDeleted?.();
+                onBack();
+              } else {
+                Alert.alert(
+                  "Error",
+                  "Failed to delete channel. Please try again."
+                );
+              }
+            } catch (error) {
+              console.error("Error deleting channel:", error);
+              Alert.alert(
+                "Error",
+                "An error occurred while deleting the channel."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
 
   return (
-    <GestureDetector gesture={panGesture}>
-      <Animated.View style={[styles.container, animatedStyle]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <BackIcon />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{channel.name}</Text>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <BackIcon />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{channelName}</Text>
+      </View>
+
+      <ScrollView style={styles.content}>
+        {/* Channel Info */}
+        <View style={styles.infoSection}>
+          <View style={styles.channelIcon}>
+            <UsersIcon />
+          </View>
+          <Text style={styles.channelName}>{channelName}</Text>
+          {channelDescription ? (
+            <Text style={styles.channelDescription}>{channelDescription}</Text>
+          ) : null}
+          <Text style={styles.memberCount}>
+            {channelMembers.length} members
+          </Text>
         </View>
 
-        <ScrollView style={styles.content}>
-          {/* Channel Info */}
-          <View style={styles.infoSection}>
-            <View style={styles.channelIcon}>
-              <UsersIcon />
-            </View>
-            <Text style={styles.channelName}>{channel.name}</Text>
-            <Text style={styles.memberCount}>{channel.members} members</Text>
-          </View>
-
-          {/* Members List */}
-          <View style={styles.section}>
+        {/* Members List */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Members</Text>
-            <View style={styles.membersList}>
-              {channel.memberNames?.map((memberName, index) => (
-                <View key={index} style={styles.memberItem}>
-                  <View
-                    style={[
-                      styles.memberAvatar,
-                      {
-                        backgroundColor:
-                          avatarColors[index % avatarColors.length],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.memberAvatarText}>
-                      {memberName.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text style={styles.memberName}>{memberName}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Channel Actions */}
-          <View style={styles.section}>
-            <TouchableOpacity style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Open Channel Chat</Text>
+            <TouchableOpacity
+              style={styles.addMemberButton}
+              onPress={() => setShowAddMembersModal(true)}
+            >
+              <Text style={styles.addMemberButtonText}>+ Add</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </Animated.View>
-    </GestureDetector>
+          <View style={styles.membersList}>
+            {channelMembers.map((memberName, index) => (
+              <View key={index} style={styles.memberItem}>
+                <View
+                  style={[
+                    styles.memberAvatar,
+                    {
+                      backgroundColor:
+                        avatarColors[index % avatarColors.length],
+                    },
+                  ]}
+                >
+                  <Text style={styles.memberAvatarText}>
+                    {memberName.charAt(0)}
+                  </Text>
+                </View>
+                <Text style={styles.memberName}>{memberName}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Channel Actions */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>Open Channel Chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => setShowEditChannelModal(true)}
+          >
+            <Text style={styles.editButtonText}>Edit Channel</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteChannel}
+          >
+            <Text style={styles.deleteButtonText}>Delete Channel</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Add Members Modal */}
+      <AddMembersModal
+        visible={showAddMembersModal}
+        onClose={() => setShowAddMembersModal(false)}
+        onAddMembers={handleAddMembers}
+        friends={friends}
+        existingMembers={channelMembers}
+        channelName={channelName}
+      />
+
+      {/* Edit Channel Modal */}
+      <EditChannelModal
+        visible={showEditChannelModal}
+        onClose={() => setShowEditChannelModal(false)}
+        channelName={channelName}
+        channelDescription={channelDescription}
+        onSave={handleEditChannel}
+      />
+    </View>
   );
 }
 
@@ -213,6 +366,13 @@ const styles = StyleSheet.create({
     color: "white",
     marginBottom: 8,
   },
+  channelDescription: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 8,
+    paddingHorizontal: 20,
+  },
   memberCount: {
     fontSize: 16,
     color: "#999",
@@ -221,11 +381,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "white",
-    marginBottom: 16,
+  },
+  addMemberButton: {
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addMemberButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
   },
   membersList: {
     gap: 12,
@@ -260,10 +436,38 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
+    marginBottom: 12,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  editButton: {
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4ECDC4",
+    marginBottom: 12,
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4ECDC4",
+  },
+  deleteButton: {
+    backgroundColor: "#1e1e1e",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#DC2626",
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#DC2626",
   },
 });

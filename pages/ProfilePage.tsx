@@ -1,4 +1,8 @@
+import { getUserProfile } from "@/supabase/supabaseClient";
+import type { Friend } from "@/types/messaging";
+import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -63,30 +67,43 @@ const PhoneIcon = () => (
   </Svg>
 );
 
-interface Friend {
-  id: number;
-  name: string;
-  message: string;
-  avatar: string;
-  online: boolean;
-}
-
 interface ProfilePageProps {
   friend: Friend;
   onBack: () => void;
 }
 
 export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
-  // Dummy profile data
-  const email = `${friend.name.toLowerCase().replace(" ", ".")}@example.com`;
-  const phone =
-    "+1 (555) " +
-    Math.floor(Math.random() * 900 + 100) +
-    "-" +
-    Math.floor(Math.random() * 9000 + 1000);
-  const bio =
-    "Software developer passionate about building amazing products. Love to collaborate and solve complex problems.";
-  const joinDate = "Joined March 2024";
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch profile data from Supabase
+  useEffect(() => {
+    async function loadProfile() {
+      setLoading(true);
+      try {
+        const profileData = await getUserProfile(friend.id);
+        setProfile(profileData);
+      } catch (error) {
+        console.error("Error loading profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadProfile();
+  }, [friend.id]);
+
+  // Profile data - uses fetched profile or friend properties as fallback
+  const email = profile?.email || friend.email || "No email available";
+  const phone = profile?.phone_number || friend.phone || "No phone available";
+  const bio = profile?.bio || friend.bio || "No bio available yet.";
+  const joinDate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : friend.joinDate || "Recently";
+  const profileImage = profile?.profile_picture_url || friend.profileImage;
 
   return (
     <View style={styles.container}>
@@ -99,20 +116,34 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Profile Avatar Section */}
-        <View style={styles.profileSection}>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#DC2626" />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        ) : (
+          <>
+            {/* Profile Avatar Section */}
+            <View style={styles.profileSection}>
+          {/* 🔒 PLACEHOLDER: Profile Image */}
+          {/* TODO: Replace with actual profile image from Supabase Storage */}
+          {/* When implemented: <Image source={{ uri: profileImage }} style={styles.profileImage} /> */}
           <View
             style={[styles.largeAvatar, { backgroundColor: friend.avatar }]}
           >
             <Text style={styles.largeAvatarText}>{friend.name.charAt(0)}</Text>
           </View>
           <Text style={styles.name}>{friend.name}</Text>
+
+          {/* ✅ FUNCTIONAL: Online status (placeholder data) */}
           <Text style={styles.status}>
             {friend.online ? "🟢 Online" : "⚫ Offline"}
           </Text>
         </View>
 
         {/* Bio Section */}
+        {/* 🔒 PLACEHOLDER: Bio data - READ ONLY */}
+        {/* TODO: Fetch from Supabase profiles table when Auth is implemented */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.card}>
@@ -121,6 +152,8 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
         </View>
 
         {/* Contact Info Section */}
+        {/* 🔒 PLACEHOLDER: Contact information - READ ONLY */}
+        {/* TODO: Fetch from Supabase profiles table when Auth is implemented */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
 
@@ -162,12 +195,25 @@ export default function ProfilePage({ friend, onBack }: ProfilePageProps) {
         </View>
 
         {/* Actions */}
+        {/* ✅ FUNCTIONAL: Navigation back to chat */}
         <View style={styles.section}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={styles.actionButton} onPress={onBack}>
             <MessageIcon />
-            <Text style={styles.actionButtonText}>Send Message</Text>
+            <Text style={styles.actionButtonText}>Back to Chat</Text>
           </TouchableOpacity>
         </View>
+
+            {/* READ-ONLY NOTICE */}
+            <View style={styles.section}>
+              <View style={styles.noticeCard}>
+                <Text style={styles.noticeText}>
+                  👁️ Profile is read-only. You're viewing {friend.name}'s
+                  information.
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -293,5 +339,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  noticeCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#DC2626",
+  },
+  noticeText: {
+    fontSize: 14,
+    color: "#ccc",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
   },
 });

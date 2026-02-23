@@ -1,30 +1,36 @@
-import "dotenv/config";
-
-export default {
+module.exports = {
   expo: {
     name: "ManageMate",
-    slug: "ManageMate",
+    slug: "managemate",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "managemate",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    splash: {
+      image: "./assets/images/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#ffffff",
+    },
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.managemate.app",
       associatedDomains: ["applinks:managemate-32f1d.firebaseapp.com"],
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        // WebView compatibility
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: false,
+          NSAllowsLocalNetworking: true,
+        },
       },
     },
     android: {
       package: "com.managemate.app",
       adaptiveIcon: {
-        backgroundColor: "#E6F4FE",
-        foregroundImage: "./assets/images/android-icon-foreground.png",
-        backgroundImage: "./assets/images/android-icon-background.png",
-        monochromeImage: "./assets/images/android-icon-monochrome.png",
+        foregroundImage: "./assets/images/adaptive-icon.png",
+        backgroundColor: "#ffffff",
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
@@ -41,13 +47,23 @@ export default {
           category: ["BROWSABLE", "DEFAULT"],
         },
       ],
+      // WebView compatibility
+      usesCleartextTraffic: false,
+      permissions: [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+      ],
     },
     web: {
+      bundler: "metro",
       output: "static",
       favicon: "./assets/images/favicon.png",
     },
+    // WebView compatibility settings
+    jsEngine: "hermes",
     plugins: [
       "expo-router",
+      "expo-secure-store",
       "expo-web-browser",
       [
         "expo-splash-screen",
@@ -79,7 +95,6 @@ export default {
     ],
     experiments: {
       typedRoutes: true,
-      reactCompiler: true,
     },
     extra: {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,

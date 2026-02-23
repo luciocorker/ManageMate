@@ -156,13 +156,14 @@ async function storeUserInSupabase(
 ) {
   try {
     // Use upsert to handle both insert and update
-    const { error } = await supabase.from("Users").upsert(
+    const { error } = await supabase.from("users").upsert(
       [
         {
           firebase_uid: user.uid,
           email: user.email,
           full_name: additionalData?.fullName || user.displayName || "",
           email_verified: user.emailVerified,
+          profile_picture_url: user.photoURL,
           created_at: new Date().toISOString(),
         },
       ],

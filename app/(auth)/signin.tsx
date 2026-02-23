@@ -1,6 +1,6 @@
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { auth } from "@/lib/firebase";
-import { signInWithApple, signInWithGoogle } from "@/lib/socialAuth";
+import { signInWithApple, signInWithGithub, signInWithGoogle } from "@/lib/socialAuth";
 import { supabase } from "@/lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";

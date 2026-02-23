@@ -1,8 +1,45 @@
+// ============================================================================
+// MESSAGING PAGE - Friend List & Channel List
+// ============================================================================
+// ✅ FUNCTIONAL FEATURES:
+// - Friend list display (from Supabase)
+// - Friend requests via email invitation
+// - Channel creation and management
+// - Navigation to direct messages (ChatScreen)
+// - Navigation to channel chats (ChannelChatScreen)
+// - Adding friends to channels
+// - Deep linking for friend requests
+//
+// 🔒 PLACEHOLDER FEATURES (Need Supabase Auth):
+// - User authentication (currently using placeholder AuthContext)
+// - Secure user ID-based friend relationships
+// - Profile data fetching from authenticated user
+//
+// ✅ FULLY FUNCTIONAL FLOW:
+// 1. Click friend in list → Opens ChatScreen for direct messaging
+// 2. In ChatScreen, click profile avatar → Opens ProfilePage (read-only)
+// 3. ProfilePage shows friend's profile info (name, email, bio, etc.)
+// ============================================================================
+
+import AddFriendModal from "@/components/AddFriendModal";
 import CreateChannelModal from "@/components/CreateChannelModal";
+import UnreadBadge from "@/components/UnreadBadge";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUnreadMessages } from "@/contexts/UnreadMessagesContext";
+import ChannelChatScreen from "@/pages/ChannelChatScreen";
 import ChannelDetail from "@/pages/ChannelDetail";
 import ChatScreen from "@/pages/ChatScreen";
-import { useState } from "react";
 import {
+  addChannelMembers,
+  createChannel,
+  getChannelMembers,
+  getChannels,
+  getDirectMessages,
+  getFriendsWithProfiles,
+} from "@/supabase/supabaseClient";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,84 +48,25 @@ import {
 } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 
-// Dummy data
-const DUMMY_FRIENDS = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    message: "Hey! Did you finish the project?",
-    avatar: "#FF6B6B",
-    online: true,
-  },
-  {
-    id: 2,
-    name: "Mike Chen",
-    message: "Thanks for your help yesterday!",
-    avatar: "#4ECDC4",
-    online: true,
-  },
-  {
-    id: 3,
-    name: "Emily Davis",
-    message: "See you at the meeting tomorrow",
-    avatar: "#45B7D1",
-    online: false,
-  },
-  {
-    id: 4,
-    name: "James Wilson",
-    message: "Can you send me those files?",
-    avatar: "#96CEB4",
-    online: false,
-  },
-  {
-    id: 5,
-    name: "Lisa Anderson",
-    message: "Great work on the presentation!",
-    avatar: "#FFEAA7",
-    online: true,
-  },
+import type { Channel, Friend } from "@/types/messaging";
+
+// Avatar colors for friends
+const AVATAR_COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#FFEAA7",
+  "#FF8B94",
+  "#9B59B6",
+  "#3498DB",
 ];
 
-interface Channel {
-  id: number;
-  name: string;
-  members: number;
-  memberNames?: string[];
-}
-
-const INITIAL_CHANNELS: Channel[] = [
-  {
-    id: 1,
-    name: "Project Team",
-    members: 5,
-    memberNames: [
-      "Sarah Johnson",
-      "Mike Chen",
-      "Emily Davis",
-      "James Wilson",
-      "Lisa Anderson",
-    ],
-  },
-  {
-    id: 2,
-    name: "Design Squad",
-    members: 3,
-    memberNames: ["Sarah Johnson", "Mike Chen", "Emily Davis"],
-  },
-  {
-    id: 3,
-    name: "Development",
-    members: 8,
-    memberNames: ["Mike Chen", "James Wilson", "Others"],
-  },
-  {
-    id: 4,
-    name: "Marketing",
-    members: 4,
-    memberNames: ["Lisa Anderson", "Emily Davis", "Others"],
-  },
-];
+// Get consistent color for a friend
+const getAvatarColor = (name: string) => {
+  const index = name.length % AVATAR_COLORS.length;
+  return AVATAR_COLORS[index];
+};
 
 // SVG Icons
 const AddFriendIcon = () => (
@@ -155,32 +133,208 @@ const OnlineIndicator = () => (
 );
 
 export default function MessagingPage() {
-  const [selectedFriend, setSelectedFriend] = useState<
-    (typeof DUMMY_FRIENDS)[0] | null
-  >(null);
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-  const [channels, setChannels] = useState<Channel[]>(INITIAL_CHANNELS);
-  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const { user, loading: authLoading } = useAuth();
 
-  const handleCreateChannel = (
-    channelName: string,
-    selectedFriends: typeof DUMMY_FRIENDS
-  ) => {
-    const newChannel: Channel = {
-      id: channels.length + 1,
-      name: channelName,
-      members: selectedFriends.length,
-      memberNames: selectedFriends.map((f) => f.name),
+  // ============================================================================
+  // ✅ FUNCTIONAL: Unread message tracking
+  // Track when user is on messenger page to prevent popup notifications
+  // ============================================================================
+  const { getUnreadCount, setIsOnMessengerPage } = useUnreadMessages();
+
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [showChannelDetail, setShowChannelDetail] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // ============================================================================
+  // ✅ FUNCTIONAL: Track when user enters/leaves messenger page
+  // This prevents popup notifications when user is already viewing messages
+  // ============================================================================
+  useEffect(() => {
+    // User is on messenger page
+    setIsOnMessengerPage(true);
+
+    // Cleanup: User left messenger page
+    return () => {
+      setIsOnMessengerPage(false);
     };
-    setChannels([...channels, newChannel]);
+  }, []);
+
+  // Load data from Supabase when component mounts
+  useEffect(() => {
+    // Don't load if auth is still loading
+    if (!authLoading) {
+      loadData();
+    }
+  }, [authLoading]);
+
+  async function loadData() {
+    if (!user) {
+      console.log("⚠️ No user found, skipping data load");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    console.log("📊 Loading messenger data for user:", user.email, "UID:", user.id);
+
+    try {
+      // Load channels and friends from Supabase using Firebase UID
+      console.log("🔄 Fetching channels and friends from Supabase...");
+      const [channelsData, friendsWithProfiles] = await Promise.all([
+        getChannels(),
+        getFriendsWithProfiles(user.id),
+      ]);
+
+      console.log("📊 Raw data loaded:");
+      console.log("  - Channels:", channelsData.length);
+      console.log("  - Friends with profiles:", friendsWithProfiles.length);
+
+      if (channelsData.length > 0) {
+        console.log("  - Sample channel:", channelsData[0]);
+      }
+      if (friendsWithProfiles.length > 0) {
+        console.log("  - Sample friend:", friendsWithProfiles[0]);
+      }
+
+      // Transform Supabase channels to display format with member counts
+      const displayChannels: Channel[] = await Promise.all(
+        channelsData.map(async (ch) => {
+          const memberIds = await getChannelMembers(ch.id);
+          console.log(`  - Channel "${ch.name}" has ${memberIds.length} members`);
+          return {
+            id: ch.id,
+            name: ch.name,
+            members: memberIds.length,
+            memberNames: memberIds, // These are Firebase UIDs
+          };
+        })
+      );
+
+      // Transform Supabase friends to display format with last message
+      const displayFriends: Friend[] = await Promise.all(
+        friendsWithProfiles.map(async (f) => {
+          const profile = f.profile;
+          
+          console.log(`  - Processing friend: ${profile?.full_name || profile?.email}`);
+          
+          // Get last message with this friend using Firebase UIDs
+          const messages = await getDirectMessages(user.id, f.friend_id);
+          const lastMessage =
+            messages.length > 0 ? messages[messages.length - 1] : null;
+
+          console.log(`    - Messages with this friend: ${messages.length}`);
+          if (lastMessage) {
+            console.log(`    - Last message: "${lastMessage.content.substring(0, 30)}..."`);
+          }
+
+          return {
+            id: f.friend_id, // Use friend's Firebase UID as ID
+            name: profile?.full_name || profile?.email || "Unknown User",
+            email: profile?.email,
+            message: lastMessage ? lastMessage.content : "No messages yet",
+            avatar: getAvatarColor(profile?.full_name || profile?.email || ""),
+            online: false, // TODO: Add real-time presence
+            bio: profile?.bio,
+            phone: profile?.phone_number,
+            profileImage: profile?.profile_picture_url,
+            joinDate: profile?.created_at
+              ? new Date(profile.created_at).toLocaleDateString()
+              : "Recently",
+          };
+        })
+      );
+
+      console.log("✅ Data transformation complete:");
+      console.log("  - Display channels:", displayChannels.length);
+      console.log("  - Display friends:", displayFriends.length);
+
+      setChannels(displayChannels);
+      setFriends(displayFriends);
+      console.log("✅ Messenger data loaded and state updated successfully");
+    } catch (error) {
+      console.error("❌ Error loading messenger data:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleCreateChannel = async (
+    channelName: string,
+    selectedFriends: Friend[]
+  ) => {
+    if (!user) return;
+
+    try {
+      // Create channel in Supabase
+      const memberNames = selectedFriends.map((f) => f.name).join(", ");
+      const newChannel = await createChannel(
+        channelName,
+        `Members: ${memberNames}`
+      );
+
+      if (newChannel) {
+        // Add selected friends as channel members using Firebase UIDs
+        const friendIds = selectedFriends.map((f) => f.id);
+        // Also add the current user as a member
+        const allMemberIds = [user.id, ...friendIds];
+        await addChannelMembers(newChannel.id, allMemberIds, user.id);
+
+        // Add to local state
+        const displayChannel: Channel = {
+          id: newChannel.id,
+          name: newChannel.name,
+          members: allMemberIds.length,
+          memberNames: [user.name, ...selectedFriends.map((f) => f.name)],
+        };
+        setChannels([displayChannel, ...channels]);
+      }
+    } catch (error) {
+      console.error("Error creating channel:", error);
+    }
   };
 
-  // If a channel is selected, show the channel detail screen
-  if (selectedChannel) {
+  // If viewing channel detail, show the detail screen
+  if (selectedChannel && showChannelDetail) {
     return (
       <ChannelDetail
         channel={selectedChannel}
-        onBack={() => setSelectedChannel(null)}
+        onBack={() => {
+          setShowChannelDetail(false);
+          setSelectedChannel(null);
+          // Reload data when returning from detail view
+          loadData();
+        }}
+        onMembersUpdated={() => {
+          // Reload data to reflect updated member counts
+          loadData();
+        }}
+        onChannelDeleted={() => {
+          // Channel was deleted, close detail and reload
+          setShowChannelDetail(false);
+          setSelectedChannel(null);
+          loadData();
+        }}
+      />
+    );
+  }
+
+  // If a channel is selected, show the channel chat screen
+  if (selectedChannel) {
+    return (
+      <ChannelChatScreen
+        channel={selectedChannel}
+        onBack={() => {
+          setSelectedChannel(null);
+          // Reload data to ensure fresh state
+          loadData();
+        }}
+        onInfoPress={() => setShowChannelDetail(true)}
       />
     );
   }
@@ -190,7 +344,11 @@ export default function MessagingPage() {
     return (
       <ChatScreen
         friend={selectedFriend}
-        onBack={() => setSelectedFriend(null)}
+        onBack={() => {
+          setSelectedFriend(null);
+          // Reload data to refresh last messages
+          loadData();
+        }}
       />
     );
   }
@@ -207,45 +365,72 @@ export default function MessagingPage() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Friends</Text>
-            <TouchableOpacity style={styles.addButton}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddFriendModal(true)}
+            >
               <AddFriendIcon />
             </TouchableOpacity>
           </View>
 
           <View style={styles.friendsList}>
-            {DUMMY_FRIENDS.map((friend) => (
-              <TouchableOpacity
-                key={friend.id}
-                style={styles.friendItem}
-                onPress={() => setSelectedFriend(friend)}
-              >
-                <View style={styles.friendContent}>
-                  <View style={styles.avatarContainer}>
-                    <View
-                      style={[
-                        styles.avatar,
-                        { backgroundColor: friend.avatar },
-                      ]}
-                    >
-                      <Text style={styles.avatarText}>
-                        {friend.name.charAt(0)}
-                      </Text>
-                    </View>
-                    {friend.online && (
-                      <View style={styles.onlineIndicator}>
-                        <OnlineIndicator />
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#DC2626" />
+                <Text style={styles.loadingText}>Loading friends...</Text>
+              </View>
+            ) : friends.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No friends yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap the + button to add friends
+                </Text>
+              </View>
+            ) : (
+              friends.map((friend) => {
+                // ✅ FUNCTIONAL: Get unread count for this friend
+                // Room ID uses Firebase UIDs
+                const roomId = user ? [user.id, friend.id].sort().join("_") : "";
+                const unreadCount = getUnreadCount(roomId);
+
+                return (
+                  <TouchableOpacity
+                    key={friend.id}
+                    style={styles.friendItem}
+                    onPress={() => setSelectedFriend(friend)}
+                  >
+                    <View style={styles.friendContent}>
+                      <View style={styles.avatarContainer}>
+                        <View
+                          style={[
+                            styles.avatar,
+                            { backgroundColor: friend.avatar },
+                          ]}
+                        >
+                          <Text style={styles.avatarText}>
+                            {friend.name.charAt(0)}
+                          </Text>
+                        </View>
+                        {friend.online && (
+                          <View style={styles.onlineIndicator}>
+                            <OnlineIndicator />
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                  <View style={styles.friendInfo}>
-                    <Text style={styles.friendName}>{friend.name}</Text>
-                    <Text style={styles.friendMessage} numberOfLines={1}>
-                      {friend.message}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                      <View style={styles.friendInfo}>
+                        <Text style={styles.friendName}>{friend.name}</Text>
+                        <Text style={styles.friendMessage} numberOfLines={1}>
+                          {friend.message}
+                        </Text>
+                      </View>
+
+                      {/* ✅ FUNCTIONAL: Unread message badge */}
+                      <UnreadBadge count={unreadCount} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         </View>
 
@@ -262,23 +447,47 @@ export default function MessagingPage() {
           </View>
 
           <View style={styles.channelsList}>
-            {channels.map((channel) => (
-              <TouchableOpacity
-                key={channel.id}
-                style={styles.channelItem}
-                onPress={() => setSelectedChannel(channel)}
-              >
-                <View style={styles.channelIcon}>
-                  <ChannelIcon />
-                </View>
-                <View style={styles.channelInfo}>
-                  <Text style={styles.channelName}>{channel.name}</Text>
-                  <Text style={styles.channelMembers}>
-                    {channel.members} members
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#DC2626" />
+                <Text style={styles.loadingText}>Loading channels...</Text>
+              </View>
+            ) : channels.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No channels yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Tap the + button to create a channel
+                </Text>
+              </View>
+            ) : (
+              channels.map((channel) => {
+                // ✅ FUNCTIONAL: Get unread count for this channel
+                const unreadCount = getUnreadCount(channel.id);
+
+                return (
+                  <TouchableOpacity
+                    key={channel.id}
+                    style={styles.channelItem}
+                    onPress={() => setSelectedChannel(channel)}
+                  >
+                    <View style={styles.channelIcon}>
+                      <ChannelIcon />
+                    </View>
+                    <View style={styles.channelInfo}>
+                      <Text style={styles.channelName}>{channel.name}</Text>
+                      <Text style={styles.channelMembers}>
+                        {channel.members > 0
+                          ? `${channel.members} members`
+                          : "No members yet"}
+                      </Text>
+                    </View>
+
+                    {/* ✅ FUNCTIONAL: Unread message badge */}
+                    <UnreadBadge count={unreadCount} />
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         </View>
       </ScrollView>
@@ -288,7 +497,15 @@ export default function MessagingPage() {
         visible={showCreateChannelModal}
         onClose={() => setShowCreateChannelModal(false)}
         onCreateChannel={handleCreateChannel}
-        friends={DUMMY_FRIENDS}
+        friends={friends}
+      />
+
+      <AddFriendModal
+        visible={showAddFriendModal}
+        onClose={() => setShowAddFriendModal(false)}
+        currentUserName={user?.name || "TestUser"}
+        currentUserEmail={user?.email || "test@example.com"}
+        onSuccess={loadData}
       />
     </View>
   );
@@ -411,5 +628,31 @@ const styles = StyleSheet.create({
   channelMembers: {
     fontSize: 13,
     color: "#999",
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    color: "#999",
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    color: "#999",
+    fontSize: 14,
+    textAlign: "center",
   },
 });

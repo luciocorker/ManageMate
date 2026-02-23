@@ -62,7 +62,7 @@ export default function LandingScreen() {
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => router.push("/(auth)/signup")}
+              onPress={() => router.push("/(auth)/signup" as any)}
             >
               <Text style={styles.primaryButtonText}>Get Started</Text>
               <IconSymbol name="arrow.right" size={20} color="#ff6b6b" />
@@ -70,7 +70,7 @@ export default function LandingScreen() {
 
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={() => router.push("/(auth)/signin")}
+              onPress={() => router.push("/(auth)/signin" as any)}
             >
               <Text style={styles.secondaryButtonText}>Sign In</Text>
             </TouchableOpacity>
@@ -215,7 +215,7 @@ export default function LandingScreen() {
         <Text style={styles.footerTitle}>Ready to get started?</Text>
         <TouchableOpacity
           style={styles.footerButton}
-          onPress={() => router.push("/(auth)/signup")}
+          onPress={() => router.push("/(auth)/signup" as any)}
         >
           <Text style={styles.footerButtonText}>Create Free Account</Text>
         </TouchableOpacity>
